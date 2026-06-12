@@ -18,8 +18,16 @@ is weakest; the full competitive/technical analysis lives in
 - **Dialect-aware**: en-US ↔ en-GB spelling, Spanish missing accents,
   inverted ¿/¡, «por qué» in questions, and peninsular-vs-LatAm usage
   (vosotros/ustedes, voseo) — switchable per document.
-- **Word documents**: open `.docx` (limits: **400,000 characters / 25 MB** —
-  4× Grammarly's 100k/4 MB) and export back to `.docx`.
+- **Word, PDF and Excel**: open `.docx`, `.pdf` (text extracted into editable
+  paragraphs) and `.xlsx`/`.xls`/`.csv` (editable grid with cell-level
+  checking); limits **400,000 characters / 25 MB** — 4× Grammarly's 100k/4 MB.
+  Export to `.docx`, `.xlsx`, or PDF (print).
+- **Originality self-check**: add the sources you used and Pluma highlights
+  where your draft overlaps them — both **verbatim** and **paraphrased**
+  (word-shingles + sentence-level similarity) — then offers to quote or cite
+  the passage. This closes the gap Grammarly's reviewers flag: its plagiarism
+  check is verbatim/web-only and source-blind. It is an integrity aid, not an
+  evasion tool.
 - **Quiet design**: paper-and-ink look, no gloss; documents persist in
   `localStorage` (no account needed yet).
 
@@ -56,6 +64,10 @@ Engine smoke test: `npx esbuild scripts/engine-smoke.ts --bundle --format=esm --
 3. Accounts + cloud documents; collaboration via the same Delta model.
 4. Citations and structure feedback for essays.
 
+## Scope boundary
+
 Pluma helps students **improve their own writing** — it explains every
-suggestion and leaves the decision to the writer. It does not include
-AI-detection-evasion ("humanizer") functionality.
+suggestion, shows where a draft overlaps its sources, and leaves the decision
+to the writer. It deliberately does **not** include AI-detection-evasion
+("humanizer") functionality whose purpose is to disguise AI-generated text from
+academic-integrity checks, even in testing builds.

@@ -310,6 +310,65 @@ select.dialect {
 .panel h2 { font-size: 15px; margin: 0 0 4px; }
 .panel .sub { color: var(--faint); font-size: 12.5px; margin: 0 0 16px; }
 
+.panel-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+.panel-tabs button {
+  flex: 1;
+  border: 1px solid var(--rule);
+  background: transparent;
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.panel-tabs button:hover { color: var(--ink); }
+.panel-tabs button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
+
+/* overlap highlights */
+.pl-overlap { cursor: pointer; }
+.pl-overlap--verbatim { background: rgba(179, 64, 58, 0.16); }
+.pl-overlap--paraphrase { background: rgba(46, 94, 138, 0.14); }
+.pl-overlap--active { outline: 1px solid var(--accent); }
+
+.orig-score {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+.orig-score .pct { font-family: var(--serif); font-size: 30px; color: var(--ink); }
+.orig-score .lbl { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+.src-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.src-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+.src-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-row .btn { padding: 3px 9px; font-size: 12px; }
+
+.src-add { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.src-add input, .src-add textarea {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--bg);
+  resize: vertical;
+}
+.src-add input:focus, .src-add textarea:focus { outline: none; border-color: var(--accent); }
+
 .alert-card {
   border: 1px solid var(--rule);
   border-radius: 8px;

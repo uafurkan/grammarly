@@ -3,8 +3,15 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EditorContent, useEditor, type Editor as TTEditor } from '@tiptap/react'
 import { buildExtensions } from '../editor/extensions'
 import { alertRange, docText, suggestionsKey } from '../editor/suggestions-plugin'
+import { originalityKey, overlapRange } from '../editor/originality-plugin'
 import { check, fingerprint } from '../engine/checker'
 import { DIALECT_LABELS, type Alert, type Dialect } from '../engine/types'
+import {
+  checkOriginality,
+  scoreOriginality,
+  type OverlapMatch,
+  type Source,
+} from '../engine/originality'
 import { getDoc, updateDoc } from '../store/documents'
 import { exportDocx } from '../files/docx-export'
 
@@ -20,9 +27,16 @@ export default function EditorPage() {
   const [counts, setCounts] = useState({ words: 0, chars: 0 })
   const [notice, setNotice] = useState<string | null>(null)
 
+  const [panel, setPanel] = useState<'grammar' | 'originality'>('grammar')
+  const [sources, setSources] = useState<Source[]>(stored.current?.sources ?? [])
+  const [overlaps, setOverlaps] = useState<OverlapMatch[]>([])
+  const [activeOverlap, setActiveOverlap] = useState<string | null>(null)
+
   const editorRef = useRef<TTEditor | null>(null)
   const dialectRef = useRef(dialect)
   const titleRef = useRef(title)
+  const sourcesRef = useRef(sources)
+  sourcesRef.current = sources
   const dismissedRef = useRef<Set<string>>(new Set())
   const checkTimer = useRef<number | undefined>(undefined)
   const saveTimer = useRef<number | undefined>(undefined)
@@ -55,10 +69,34 @@ export default function EditorPage() {
     )
   }, [])
 
+  const runOriginality = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const { text, toPm } = docText(editor.state.doc)
+    const found = checkOriginality(text, sourcesRef.current)
+
+    const items = found
+      .map((m) => {
+        const from = toPm(m.begin)
+        const to = toPm(m.end)
+        return from !== null && to !== null && from < to ? { match: m, from, to } : null
+      })
+      .filter((x): x is { match: OverlapMatch; from: number; to: number } => x !== null)
+
+    setOverlaps(found)
+    setActiveOverlap(null)
+    editor.view.dispatch(
+      editor.state.tr.setMeta(originalityKey, { type: 'set', items, activeId: null }),
+    )
+  }, [])
+
   const scheduleCheck = useCallback(() => {
     window.clearTimeout(checkTimer.current)
-    checkTimer.current = window.setTimeout(runCheck, 500)
-  }, [runCheck])
+    checkTimer.current = window.setTimeout(() => {
+      runCheck()
+      if (sourcesRef.current.length > 0) runOriginality()
+    }, 500)
+  }, [runCheck, runOriginality])
 
   const scheduleSave = useCallback(() => {
     if (!id) return
@@ -72,6 +110,7 @@ export default function EditorPage() {
         dialect: dialectRef.current,
         content: editor.getJSON(),
         words: text.trim() ? text.trim().split(/\s+/).length : 0,
+        sources: sourcesRef.current,
       })
     }, 700)
   }, [id])
@@ -89,8 +128,24 @@ export default function EditorPage() {
     }
   }, [])
 
+  const setActiveOverlapHl = useCallback((overlapId: string | null, focusEditor = false) => {
+    setActiveOverlap(overlapId)
+    const editor = editorRef.current
+    if (!editor) return
+    if (overlapId && focusEditor) {
+      const range = overlapRange(editor.state, overlapId)
+      if (range) editor.chain().focus().setTextSelection(range.from).scrollIntoView().run()
+    }
+  }, [])
+
   const editor = useEditor({
-    extensions: buildExtensions((alertId) => setActive(alertId)),
+    extensions: buildExtensions(
+      (alertId) => setActive(alertId),
+      (overlapId) => {
+        setPanel('originality')
+        setActiveOverlapHl(overlapId)
+      },
+    ),
     content: (stored.current?.content as never) ?? '',
     onUpdate: () => {
       scheduleCheck()
@@ -135,6 +190,46 @@ export default function EditorPage() {
     dismissedRef.current.add(fingerprint(alert))
     if (activeId === alert.id) setActiveId(null)
     runCheck()
+  }
+
+  const addSource = (label: string, text: string) => {
+    const next = [...sourcesRef.current, { id: crypto.randomUUID(), label: label.trim() || `Source ${sourcesRef.current.length + 1}`, text }]
+    setSources(next)
+    sourcesRef.current = next
+    runOriginality()
+    scheduleSave()
+  }
+
+  const removeSource = (sid: string) => {
+    const next = sourcesRef.current.filter((s) => s.id !== sid)
+    setSources(next)
+    sourcesRef.current = next
+    runOriginality()
+    scheduleSave()
+  }
+
+  const quoteOverlap = (m: OverlapMatch) => {
+    const ed = editorRef.current
+    if (!ed) return
+    const range = overlapRange(ed.state, m.id)
+    if (!range) return
+    ed.chain()
+      .focus()
+      .insertContentAt(range.to, '” ')
+      .insertContentAt(range.from, '“')
+      .run()
+    runOriginality()
+    scheduleSave()
+  }
+
+  const citeOverlap = (m: OverlapMatch) => {
+    const ed = editorRef.current
+    if (!ed) return
+    const range = overlapRange(ed.state, m.id)
+    if (!range) return
+    ed.chain().focus().insertContentAt(range.to, ` (${m.sourceLabel}) `).run()
+    runOriginality()
+    scheduleSave()
   }
 
   const onExport = async () => {
@@ -202,6 +297,35 @@ export default function EditorPage() {
         </div>
 
         <aside className="panel">
+          <div className="panel-tabs">
+            <button className={panel === 'grammar' ? 'on' : ''} onClick={() => setPanel('grammar')}>
+              Suggestions{alerts.length > 0 ? ` (${alerts.length})` : ''}
+            </button>
+            <button
+              className={panel === 'originality' ? 'on' : ''}
+              onClick={() => {
+                setPanel('originality')
+                runOriginality()
+              }}
+            >
+              Originality{overlaps.length > 0 ? ` (${overlaps.length})` : ''}
+            </button>
+          </div>
+
+          {panel === 'originality' ? (
+            <OriginalityPanel
+              sources={sources}
+              overlaps={overlaps}
+              score={scoreOriginality(docText(editor.state.doc).text, overlaps)}
+              activeId={activeOverlap}
+              onAdd={addSource}
+              onRemove={removeSource}
+              onJump={(id) => setActiveOverlapHl(id, true)}
+              onQuote={quoteOverlap}
+              onCite={citeOverlap}
+            />
+          ) : (
+          <>
           <h2>Suggestions</h2>
           <p className="sub">
             {correctness} correctness · {alerts.length - correctness} clarity
@@ -257,11 +381,138 @@ export default function EditorPage() {
               </div>
             ))
           )}
+          </>
+          )}
         </aside>
       </div>
 
       {notice && <div className="notice">{notice}</div>}
     </div>
+  )
+}
+
+function OriginalityPanel({
+  sources,
+  overlaps,
+  score,
+  activeId,
+  onAdd,
+  onRemove,
+  onJump,
+  onQuote,
+  onCite,
+}: {
+  sources: Source[]
+  overlaps: OverlapMatch[]
+  score: { overlapPercent: number; verbatim: number; paraphrase: number }
+  activeId: string | null
+  onAdd: (label: string, text: string) => void
+  onRemove: (id: string) => void
+  onJump: (id: string) => void
+  onQuote: (m: OverlapMatch) => void
+  onCite: (m: OverlapMatch) => void
+}) {
+  const [label, setLabel] = useState('')
+  const [text, setText] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  return (
+    <>
+      <h2>Originality</h2>
+      <p className="sub">
+        Compares your writing against sources you add — verbatim and paraphrased —
+        so you can quote or cite them. A self-check, not a verdict.
+      </p>
+
+      {sources.length > 0 && (
+        <div className="orig-score">
+          <span className="pct">{score.overlapPercent}%</span>
+          <span className="lbl">
+            of your text overlaps your sources<br />
+            {score.verbatim} verbatim · {score.paraphrase} paraphrased
+          </span>
+        </div>
+      )}
+
+      <div className="src-list">
+        {sources.map((s) => (
+          <div key={s.id} className="src-row">
+            <span title={s.text.slice(0, 200)}>{s.label}</span>
+            <button className="btn btn--quiet btn--danger" onClick={() => onRemove(s.id)}>Remove</button>
+          </div>
+        ))}
+      </div>
+
+      {adding ? (
+        <div className="src-add">
+          <input
+            placeholder="Source label (e.g. Smith 2021)"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+          />
+          <textarea
+            placeholder="Paste the source text here…"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={5}
+          />
+          <div className="row">
+            <button
+              className="btn btn--primary"
+              disabled={text.trim().length === 0}
+              onClick={() => {
+                onAdd(label, text)
+                setLabel('')
+                setText('')
+                setAdding(false)
+              }}
+            >
+              Add source
+            </button>
+            <button className="btn btn--quiet" onClick={() => setAdding(false)}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button className="btn" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setAdding(true)}>
+          + Add a source
+        </button>
+      )}
+
+      <div style={{ height: 18 }} />
+
+      {sources.length === 0 ? (
+        <div className="clean">Add the sources you used and Pluma will show where your draft overlaps them.</div>
+      ) : overlaps.length === 0 ? (
+        <div className="clean">
+          <span className="mark">✓</span>
+          No overlap found with your sources.
+        </div>
+      ) : (
+        overlaps.map((m) => (
+          <div
+            key={m.id}
+            className={`alert-card${m.id === activeId ? ' active' : ''}`}
+            onClick={() => onJump(m.id)}
+          >
+            <div className="cat">
+              <span className={`dot dot--${m.kind === 'verbatim' ? 'correctness' : 'clarity'}`} />
+              {m.kind === 'verbatim' ? 'Verbatim' : `Paraphrase · ${Math.round(m.similarity * 100)}%`} · {m.sourceLabel}
+            </div>
+            <div className="msg" style={{ fontStyle: 'italic' }}>
+              “{m.text.length > 90 ? m.text.slice(0, 90) + '…' : m.text}”
+            </div>
+            <div className="row">
+              <button className="btn btn--primary" onClick={(e) => { e.stopPropagation(); onQuote(m) }}>
+                Quote it
+              </button>
+              <button className="btn" onClick={(e) => { e.stopPropagation(); onCite(m) }}>
+                Add citation
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+    </>
   )
 }
 

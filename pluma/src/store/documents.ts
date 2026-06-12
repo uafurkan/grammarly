@@ -1,4 +1,5 @@
 import type { Dialect } from '../engine/types'
+import type { Source } from '../engine/originality'
 
 export type DocKind = 'text' | 'sheet'
 
@@ -12,8 +13,10 @@ export interface DocMeta {
 }
 
 export interface StoredDoc extends DocMeta {
-  /** TipTap JSON document */
+  /** TipTap JSON document, or SheetContent for spreadsheets */
   content: unknown
+  /** reference sources for the originality self-check (text documents) */
+  sources?: Source[]
 }
 
 const KEY = 'pluma.docs.v1'
