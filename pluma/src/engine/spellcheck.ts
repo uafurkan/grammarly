@@ -46,7 +46,9 @@ export function spellcheck(
   lang: 'en' | 'es',
 ): RuleMatch[] {
   const out: RuleMatch[] = []
-  for (const tok of tokenize(text)) {
+  const toks = tokenize(text)
+  for (let ti = 0; ti < toks.length; ti++) {
+    const tok = toks[ti]
     if (out.length >= MAX_SPELL_ALERTS) break
     const w = tok.raw
     if (w.length < 2) continue
@@ -65,7 +67,9 @@ export function spellcheck(
     // a capitalised word mid-sentence is most likely a proper noun → skip
     if (/^[A-ZÁÉÍÓÚÜÑ]/.test(w) && !isSentenceStart(text, tok.begin)) continue
 
-    const suggestions = rankSuggestions(w, speller.suggest(w)).slice(0, 4)
+    const prev = toks[ti - 1]?.raw
+    const next = toks[ti + 1]?.raw
+    const suggestions = rankSuggestions(w, speller.suggest(w), prev, next).slice(0, 6)
     out.push({
       begin: tok.begin,
       end: tok.end,

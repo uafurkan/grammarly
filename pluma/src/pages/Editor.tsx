@@ -15,6 +15,7 @@ import {
 } from '../engine/originality'
 import { getDoc, updateDoc } from '../store/documents'
 import { exportDocx } from '../files/docx-export'
+import SuggestionCard from '../components/SuggestionCard'
 
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -197,12 +198,13 @@ export default function EditorPage() {
     return () => window.clearTimeout(t)
   }, [notice])
 
-  const accept = (alert: Alert) => {
+  const accept = (alert: Alert, index = 0) => {
     const ed = editorRef.current
-    if (!ed || alert.replacements.length === 0) return
+    const replacement = alert.replacements[index]
+    if (!ed || replacement === undefined) return
     const range = alertRange(ed.state, alert.id)
     if (!range) return
-    ed.chain().focus().insertContentAt(range, alert.replacements[0]).run()
+    ed.chain().focus().insertContentAt(range, replacement).run()
     window.clearTimeout(checkTimer.current)
     runCheck()
     scheduleSave()
@@ -374,60 +376,15 @@ export default function EditorPage() {
             </div>
           ) : (
             alerts.map((a) => (
-              <div
+              <SuggestionCard
                 key={a.id}
-                className={`alert-card${a.id === activeId ? ' active' : ''}`}
+                alert={a}
+                active={a.id === activeId}
                 onClick={() => setActive(a.id, true)}
-              >
-                <div className="cat">
-                  <span className={`dot dot--${a.category}`} />
-                  {a.category}
-                </div>
-                <div className="change">
-                  <span className="from">{a.text.length > 40 ? a.text.slice(0, 40) + '…' : a.text}</span>
-                  {a.replacements[0] !== undefined && (
-                    <>
-                      {' → '}
-                      <span className="to">{a.replacements[0]}</span>
-                    </>
-                  )}
-                </div>
-                <div className="msg">{a.message}</div>
-                <div className="row">
-                  {a.replacements.length > 0 && (
-                    <button
-                      className="btn btn--primary"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        accept(a)
-                      }}
-                    >
-                      Accept
-                    </button>
-                  )}
-                  {a.ruleId.endsWith('.spelling') && (
-                    <button
-                      className="btn btn--quiet"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        addToDictionary(a)
-                      }}
-                      title="Add this word to your personal dictionary"
-                    >
-                      Add to dictionary
-                    </button>
-                  )}
-                  <button
-                    className="btn btn--quiet"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      dismiss(a)
-                    }}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
+                onAccept={(index) => accept(a, index)}
+                onDismiss={() => dismiss(a)}
+                onAddToDictionary={() => addToDictionary(a)}
+              />
             ))
           )}
           </>

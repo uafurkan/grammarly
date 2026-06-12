@@ -4,6 +4,7 @@ import { check, fingerprint } from '../engine/checker'
 import { DIALECT_LABELS, type Alert, type Dialect } from '../engine/types'
 import { getDoc, updateDoc } from '../store/documents'
 import { exportXlsx, newSheetContent, type SheetContent } from '../files/xlsx-import'
+import SuggestionCard from '../components/SuggestionCard'
 
 interface SheetAlert {
   key: string
@@ -127,9 +128,9 @@ export default function SheetEditor() {
     scheduleSave()
   }
 
-  const acceptAlert = (sa: SheetAlert) => {
+  const acceptAlert = (sa: SheetAlert, index = 0) => {
     const value = contentRef.current.sheets[sa.sheet].rows[sa.r]?.[sa.c] ?? ''
-    const repl = sa.alert.replacements[0]
+    const repl = sa.alert.replacements[index]
     if (repl === undefined) return
     const next = value.slice(0, sa.alert.begin) + repl + value.slice(sa.alert.end)
     setSheetIdx(sa.sheet)
@@ -301,50 +302,15 @@ export default function SheetEditor() {
             </div>
           ) : (
             alerts.map((sa) => (
-              <div
+              <SuggestionCard
                 key={sa.key}
-                className={`alert-card${sa.key === activeKey ? ' active' : ''}`}
+                alert={sa.alert}
+                active={sa.key === activeKey}
+                location={`${content.sheets[sa.sheet].name} · ${colName(sa.c)}${sa.r + 1}`}
                 onClick={() => jumpTo(sa)}
-              >
-                <div className="cat">
-                  <span className={`dot dot--${sa.alert.category}`} />
-                  {content.sheets[sa.sheet].name} · {colName(sa.c)}{sa.r + 1}
-                </div>
-                <div className="change">
-                  <span className="from">
-                    {sa.alert.text.length > 40 ? sa.alert.text.slice(0, 40) + '…' : sa.alert.text}
-                  </span>
-                  {sa.alert.replacements[0] !== undefined && (
-                    <>
-                      {' → '}
-                      <span className="to">{sa.alert.replacements[0]}</span>
-                    </>
-                  )}
-                </div>
-                <div className="msg">{sa.alert.message}</div>
-                <div className="row">
-                  {sa.alert.replacements.length > 0 && (
-                    <button
-                      className="btn btn--primary"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        acceptAlert(sa)
-                      }}
-                    >
-                      Accept
-                    </button>
-                  )}
-                  <button
-                    className="btn btn--quiet"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      dismissAlert(sa)
-                    }}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
+                onAccept={(index) => acceptAlert(sa, index)}
+                onDismiss={() => dismissAlert(sa)}
+              />
             ))
           )}
         </aside>
