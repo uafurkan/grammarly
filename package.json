@@ -1,0 +1,11 @@
+{
+  "name": "grammarly-pluma-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pluma writing assistant. The deployable app lives in pluma/.",
+  "scripts": {
+    "install:app": "npm --prefix pluma install",
+    "build": "npm --prefix pluma install && npm --prefix pluma run build",
+    "dev": "npm --prefix pluma run dev"
+  }
+}
