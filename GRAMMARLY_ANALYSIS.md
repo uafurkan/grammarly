@@ -6,6 +6,17 @@
 
 ---
 
+## Özet (Türkçe)
+
+- Grammarly'nin web ürünü bulut tabanlı bir zengin-metin editörüdür (`app.grammarly.com`). Metin tarayıcıda değil **sunucuda** denetlenir: istemci, düzenlemeleri **WebSocket** (`capi.grammarly.com`) üzerinden artımlı **delta**'lar halinde gönderir; sunucu, karakter aralıkları ve düzeltme önerileri içeren "alert" mesajları döndürür.
+- Gerçek zamanlı his, **operasyonel dönüşüm (OT)** tabanlı bir Delta modelinden gelir: siz yazmaya devam ederken istemci, mevcut önerilerin konumlarını **kendi tarafında rebase ederek** kaydırır — sunucunun yeniden analiz etmesini beklemez. Taklit edilmesi gereken çekirdek desen budur.
+- NLP katmanı hibrittir: kurallar + hızlı **GECToR** tarzı etiketleme modelleri (seq2seq'ten ~10× hızlı, <100 ms hedef) + talep üzerine çalışan **LLM** yeniden yazımları.
+- **Kritik düzeltme:** Grammarly artık yalnızca İngilizce değil — ~23 dilde (İspanyolca dahil: İspanya/Meksika/Arjantin) yazım desteği veriyor. **Ancak bölgesel varyantları gerçekten ayırt etmiyor** ("does not recognize language variations"). Sizin farkınız tam burada: gerçek **lehçe-duyarlı** motor (EN US/UK + ES İspanya/LatAm).
+- Web editörü yalnızca DOC/DOCX/ODT/TXT/RTF kabul ediyor (100.000 karakter / 4 MB sınırı); **PDF, Excel, LaTeX, Markdown yok**. Tarayıcıda PDF/Excel düzenleme + canlı denetim vizyonunuz, Grammarly'nin hiç girmediği bir alan.
+- Geliştirici SDK'sı Ocak 2024'te kapatıldı — gömülebilir motor/API alanı da boş.
+
+---
+
 ## 0. Executive summary
 
 - Grammarly's web product is a **cloud rich-text editor** (`app.grammarly.com`) plus a marketing/account site. Text is checked **server-side**: the client streams incremental edits to a backend over **WebSocket** (`capi.grammarly.com`), and the server pushes back suggestions ("alerts") with character ranges and replacements.
@@ -79,6 +90,55 @@ Grammarly does **not** run grammar models in the browser; it streams text to a b
 4. **`finished`** — end of a diagnostics pass, with a `score`, `errors` count, `dialect`, and doc statistics.
 - Additional actions cover options/config and feedback.
 
+### End-to-end flow
+
+```mermaid
+sequenceDiagram
+    participant U as User (keystrokes)
+    participant E as Editor client<br/>(Delta Manager + Suggestions Repo)
+    participant WS as wss://capi.grammarly.com/freews
+    participant B as Backend<br/>(rules + GECToR-style taggers + LLMs)
+
+    E->>WS: start {docid, dialect, clientVersion}
+    U->>E: types "She go to school"
+    E->>WS: submit_ot {rev, deltas:[ops]}
+    B-->>E: alert {begin:4, end:6, replacements:["goes"], category}
+    Note over E: render underline via<br/>Highlights Manager
+    U->>E: keeps typing (text shifts)
+    Note over E: client-side REBASE of alert<br/>offsets — no server round-trip
+    B-->>E: finished {rev, score, errors}
+    U->>E: accepts suggestion
+    E->>WS: submit_ot (suggestion applied as a Delta too)
+```
+
+### Illustrative message shapes (simplified from reverse-engineering writeups)
+
+```jsonc
+// client → server: open a session
+{ "id": 0, "action": "start", "client": "denali_editor",
+  "clientVersion": "1.5.43", "dialect": "american",
+  "docid": "6c231c-...-uuid", "protocolVersion": "1.0.0" }
+
+// client → server: incremental edit as OT delta
+{ "id": 1, "action": "submit_ot", "rev": 0, "doc_len": 0,
+  "deltas": [ { "ops": [ { "insert": "She go to school" } ] } ] }
+
+// server → client: one suggestion ("alert")
+{ "action": "alert", "id": 2, "rev": 0,
+  "begin": 4, "end": 6, "text": "go",
+  "replacements": ["goes"],
+  "category": "Grammar", "point": "SVAgreement",
+  "impact": "critical",
+  "explanation": "<p>The verb <b>go</b> does not agree with the subject…</p>" }
+
+// server → client: pass complete
+{ "action": "finished", "id": 3, "rev": 0,
+  "score": 62, "dialect": "american",
+  "outcomeScores": { "Clarity": 0.5, "Correctness": 0.4 } }
+```
+
+*(Field names/values are representative — assembled from the cited unofficial API docs; Grammarly's production protocol has evolved since those writeups.)*
+
 ### Keeping suggestions aligned while you type (the clever part)
 Grammarly's engineering writeups describe a production OT system built on a **Delta format** with three op types — **`insert`, `delete`, `retain`** — used uniformly for user edits *and* ML suggestions. Three client components cooperate:
 - **Suggestions Repository** — central store of active backend suggestions; tracks each as *registered / applied / removed*.
@@ -143,6 +203,39 @@ Where Grammarly is **weak** — your differentiation:
 2. **No PDF / Excel / LaTeX / Markdown.** Grammarly only round-trips word-processor files under a 100k-char / 4 MB cap. Your vision of **in-browser editing of DOCX/PDF/Excel** with live checking is something Grammarly simply does not offer.
 3. **No embeddable engine anymore** (SDK killed Jan 2024) — room for an integration/API play.
 4. **Plagiarism limited to web** (no institutional DBs) and **AI-detection claims are vendor-reported** — be honest here rather than over-promising.
+
+### Head-to-head: Grammarly web vs. the planned product
+
+| Dimension | Grammarly (web, 2026) | Planned product (target) |
+|---|---|---|
+| Dialect awareness | ❌ "does not recognize language variations" | ✅ EN-US/EN-GB + ES-ES/ES-419 as first-class, separately modeled variants |
+| Spanish quality | Generalized models shared across ES variants | Voseo, vosotros/ustedes register, regional lexicon handled explicitly |
+| File formats | DOC/DOCX/ODT/TXT/RTF only; 100k chars / 4 MB | DOCX + **PDF + Excel** (+ Markdown/LaTeX later), edited in-browser |
+| Editing surface | Own cloud editor only | Word/Excel/Acrobat-grade editing on uploaded files, same checking pipeline everywhere |
+| Academic workflow | Generic goals/scores; citations as add-on | University-assignment-first: rubric goals, citation styles, structure/argument feedback |
+| Embeddability | SDK shut down Jan 2024 | API/SDK as a deliberate product surface |
+| Real-time core | WebSocket + OT Delta + client rebase (excellent) | Match it — same pattern, no compromise |
+
+### Target architecture (web)
+
+```mermaid
+flowchart LR
+    subgraph Ingest["File ingestion"]
+        DOCX[DOCX<br/>mammoth/docx] --> DM
+        PDF[PDF<br/>pdf.js + text layer] --> DM
+        XLSX[Excel<br/>SheetJS] --> DM
+    end
+    DM[Unified document model<br/>ProseMirror/TipTap or Lexical] <-->|Delta / CRDT sync<br/>WebSocket| GW[Suggestion gateway]
+    GW --> T1
+    subgraph Pipeline["Tiered checking pipeline (per language + dialect route)"]
+        T1["Tier 1 — inline, &lt;100 ms<br/>rules + GECToR-style tagger"]
+        T2["Tier 2 — on demand<br/>LLM rewrites: clarity/tone/translation"]
+        T3["Tier 3 — async, doc-level<br/>plagiarism · citations · structure feedback"]
+    end
+    LR2[Language & dialect detector<br/>per paragraph] --> GW
+    T1 & T2 & T3 -->|"ranged alerts {begin,end,replacements,…}"| GW
+    GW -->|client-side rebase<br/>+ suggestion cards| DM
+```
 
 ### Architectural recommendations (web)
 - **Editor surface:** build on a modern document model — **ProseMirror/TipTap** (rich text, collaborative-friendly) or **Lexical** — so suggestion overlays attach to a stable position map rather than raw DOM offsets.
