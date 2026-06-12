@@ -13,6 +13,7 @@ import {
   type OverlapMatch,
   type Source,
 } from '../engine/originality'
+import { findSources, type FoundSource } from '../engine/source-finder'
 import { getDoc, updateDoc } from '../store/documents'
 import { exportDocx } from '../files/docx-export'
 import SuggestionCard from '../components/SuggestionCard'
@@ -362,6 +363,8 @@ export default function EditorPage() {
               onJump={(id) => setActiveOverlapHl(id, true)}
               onQuote={quoteOverlap}
               onCite={citeOverlap}
+              onFind={() => findSources(docText(editorRef.current!.state.doc).text, { limit: 10 })}
+              onAddFound={(s) => addSource(`${s.authors || s.via}${s.year ? `, ${s.year}` : ''}`, `${s.title}. ${s.abstract}`)}
             />
           ) : (
           <>
@@ -407,6 +410,8 @@ function OriginalityPanel({
   onJump,
   onQuote,
   onCite,
+  onFind,
+  onAddFound,
 }: {
   sources: Source[]
   overlaps: OverlapMatch[]
@@ -417,10 +422,31 @@ function OriginalityPanel({
   onJump: (id: string) => void
   onQuote: (m: OverlapMatch) => void
   onCite: (m: OverlapMatch) => void
+  onFind: () => Promise<FoundSource[]>
+  onAddFound: (s: FoundSource) => void
 }) {
   const [label, setLabel] = useState('')
   const [text, setText] = useState('')
   const [adding, setAdding] = useState(false)
+  const [finding, setFinding] = useState(false)
+  const [found, setFound] = useState<FoundSource[] | null>(null)
+  const [findError, setFindError] = useState<string | null>(null)
+  const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
+
+  const runFind = async () => {
+    setFinding(true)
+    setFindError(null)
+    setFound(null)
+    try {
+      const results = await onFind()
+      setFound(results)
+      if (results.length === 0) setFindError('No close academic matches found. Try writing a bit more first.')
+    } catch {
+      setFindError('Could not reach the academic databases. Check your connection and try again.')
+    } finally {
+      setFinding(false)
+    }
+  }
 
   return (
     <>
@@ -483,6 +509,45 @@ function OriginalityPanel({
           + Add a source
         </button>
       )}
+
+      <div className="find-box">
+        <button className="btn btn--primary" style={{ width: '100%', justifyContent: 'center' }} onClick={runFind} disabled={finding}>
+          {finding ? 'Searching academic databases…' : '✦ Find sources for me'}
+        </button>
+        <p className="find-note">
+          No source of your own? Pluma searches real academic databases
+          (OpenAlex, Crossref) and suggests papers that match your writing.
+        </p>
+
+        {findError && <div className="find-msg">{findError}</div>}
+
+        {found && found.length > 0 && (
+          <div className="found-list">
+            {found.map((s) => (
+              <div key={s.id} className="found-card">
+                <div className="found-top">
+                  <span className="found-pct">{Math.round(s.similarity * 100)}%</span>
+                  <a href={s.url} target="_blank" rel="noreferrer" className="found-title">{s.title}</a>
+                </div>
+                <div className="found-meta">
+                  {s.authors || 'Unknown authors'}{s.year ? ` · ${s.year}` : ''} · {s.via}
+                </div>
+                <button
+                  className="btn btn--quiet"
+                  disabled={addedIds.has(s.id)}
+                  onClick={() => {
+                    onAddFound(s)
+                    setAddedIds((prev) => new Set(prev).add(s.id))
+                  }}
+                >
+                  {addedIds.has(s.id) ? '✓ Added & comparing' : 'Add as source & compare'}
+                </button>
+              </div>
+            ))}
+            <p className="find-note">Match % is keyword-based — open a source to judge real relevance.</p>
+          </div>
+        )}
+      </div>
 
       <div style={{ height: 18 }} />
 

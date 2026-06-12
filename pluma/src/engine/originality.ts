@@ -85,7 +85,11 @@ function contentWords(text: string): Set<string> {
   )
 }
 
-function jaccard(a: Set<string>, b: Set<string>): number {
+export function contentWordSet(text: string): Set<string> {
+  return contentWords(text)
+}
+
+export function jaccard(a: Set<string>, b: Set<string>): number {
   if (a.size === 0 || b.size === 0) return 0
   let inter = 0
   for (const x of a) if (b.has(x)) inter++
