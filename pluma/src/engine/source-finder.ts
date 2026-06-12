@@ -44,20 +44,43 @@ function storageKey(engine: WebEngineId) {
   return `pluma.web-search.${engine}.v1`
 }
 
+// Built-in keys come from a gitignored .env.local (VITE_*), so they never
+// land in the repo. A user-saved key always wins; "Disconnect" persists.
+const env = import.meta.env as Record<string, string | undefined>
+const BUILT_IN: Partial<Record<WebEngineId, WebEngineConfig>> = {}
+if (env.VITE_BRAVE_KEY) BUILT_IN.brave = { key: env.VITE_BRAVE_KEY }
+if (env.VITE_SERPER_KEY) BUILT_IN.serper = { key: env.VITE_SERPER_KEY }
+if (env.VITE_BING_KEY) BUILT_IN.bing = { key: env.VITE_BING_KEY }
+if (env.VITE_GOOGLE_KEY && env.VITE_GOOGLE_CX)
+  BUILT_IN.google = { key: env.VITE_GOOGLE_KEY, cx: env.VITE_GOOGLE_CX }
+
+function disabledKey(engine: WebEngineId) {
+  return `pluma.web-search.${engine}.off`
+}
+
 export function getWebConfig(engine: WebEngineId): WebEngineConfig | null {
   try {
     const raw = localStorage.getItem(storageKey(engine))
-    if (!raw) return null
-    const cfg = JSON.parse(raw) as WebEngineConfig
-    return cfg.key ? cfg : null
+    if (raw) {
+      const cfg = JSON.parse(raw) as WebEngineConfig
+      if (cfg.key) return cfg
+    }
+    if (localStorage.getItem(disabledKey(engine))) return null
+    return BUILT_IN[engine] ?? null
   } catch {
-    return null
+    return BUILT_IN[engine] ?? null
   }
 }
 
 export function setWebConfig(engine: WebEngineId, cfg: WebEngineConfig | null) {
-  if (!cfg?.key) localStorage.removeItem(storageKey(engine))
-  else localStorage.setItem(storageKey(engine), JSON.stringify(cfg))
+  if (!cfg?.key) {
+    localStorage.removeItem(storageKey(engine))
+    // remember the user turned this engine off, so a built-in key doesn't revive it
+    if (BUILT_IN[engine]) localStorage.setItem(disabledKey(engine), '1')
+  } else {
+    localStorage.setItem(storageKey(engine), JSON.stringify(cfg))
+    localStorage.removeItem(disabledKey(engine))
+  }
 }
 
 // Backwards-compat helpers used by existing UI code
