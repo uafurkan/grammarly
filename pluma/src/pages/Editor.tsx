@@ -15,8 +15,8 @@ import {
 } from '../engine/originality'
 import {
   findSources,
-  getGoogleConfig,
-  setGoogleConfig,
+  getWebConfig,
+  setWebConfig,
   type FoundSource,
 } from '../engine/source-finder'
 import { getDoc, updateDoc } from '../store/documents'
@@ -437,10 +437,15 @@ function OriginalityPanel({
   const [found, setFound] = useState<FoundSource[] | null>(null)
   const [findError, setFindError] = useState<string | null>(null)
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
-  const [googleOn, setGoogleOn] = useState(() => getGoogleConfig() !== null)
-  const [googleSetup, setGoogleSetup] = useState(false)
-  const [googleKey, setGoogleKey] = useState('')
-  const [googleCx, setGoogleCx] = useState('')
+  const [webEngines, setWebEngines] = useState(() => ({
+    google: getWebConfig('google') !== null,
+    brave: getWebConfig('brave') !== null,
+    serper: getWebConfig('serper') !== null,
+    bing: getWebConfig('bing') !== null,
+  }))
+  const [webSetup, setWebSetup] = useState<'google' | 'brave' | 'serper' | 'bing' | null>(null)
+  const [webKey, setWebKey] = useState('')
+  const [webCx, setWebCx] = useState('')
 
   const runFind = async () => {
     setFinding(true)
@@ -524,56 +529,70 @@ function OriginalityPanel({
           {finding ? 'Searching academic databases…' : '✦ Find sources for me'}
         </button>
         <p className="find-note">
-          No source of your own? Pluma searches real academic databases
-          (OpenAlex, Crossref{googleOn ? ' + Google' : ''}) and suggests papers that match your writing.
+          Searches 6 free academic databases automatically (OpenAlex, Crossref,
+          Semantic Scholar, arXiv, Europe PMC, DOAJ).
+          Connect a web-search engine below to also search the open web.
         </p>
 
-        {googleSetup ? (
-          <div className="src-add">
-            <input
-              placeholder="Google API key"
-              value={googleKey}
-              onChange={(e) => setGoogleKey(e.target.value)}
-            />
-            <input
-              placeholder="Search engine ID (cx)"
-              value={googleCx}
-              onChange={(e) => setGoogleCx(e.target.value)}
-            />
-            <p className="find-note">
-              Needs a free key from Google&apos;s Programmable Search Engine.
-              Stored only in this browser.
-            </p>
-            <div className="row">
+        <div className="web-engines">
+          {(
+            [
+              { id: 'google', label: 'Google', needsCx: true, hint: 'API key + Search engine ID (cx) from programmablesearchengine.google.com' },
+              { id: 'brave',  label: 'Brave',  needsCx: false, hint: 'Subscription token from api.search.brave.com · 2 000 free/month' },
+              { id: 'serper', label: 'Serper', needsCx: false, hint: 'API key from serper.dev · 2 500 free searches' },
+              { id: 'bing',   label: 'Bing',   needsCx: false, hint: 'API key from Azure portal (Bing Search v7) · 1 000 free/month' },
+            ] as const
+          ).map(({ id, label, needsCx, hint }) =>
+            webSetup === id ? (
+              <div key={id} className="src-add">
+                <input
+                  placeholder={needsCx ? 'API key' : `${label} API key`}
+                  value={webKey}
+                  onChange={(e) => setWebKey(e.target.value)}
+                />
+                {needsCx && (
+                  <input
+                    placeholder="Search engine ID (cx)"
+                    value={webCx}
+                    onChange={(e) => setWebCx(e.target.value)}
+                  />
+                )}
+                <p className="find-note">{hint}. Stored only in this browser.</p>
+                <div className="row">
+                  <button
+                    className="btn btn--primary"
+                    disabled={!webKey.trim() || (needsCx && !webCx.trim())}
+                    onClick={() => {
+                      setWebConfig(id, { key: webKey.trim(), ...(needsCx ? { cx: webCx.trim() } : {}) })
+                      setWebEngines((prev) => ({ ...prev, [id]: true }))
+                      setWebSetup(null)
+                      setWebKey('')
+                      setWebCx('')
+                    }}
+                  >
+                    Save
+                  </button>
+                  <button className="btn btn--quiet" onClick={() => { setWebSetup(null); setWebKey(''); setWebCx('') }}>Cancel</button>
+                </div>
+              </div>
+            ) : webEngines[id] ? (
               <button
-                className="btn btn--primary"
-                disabled={!googleKey.trim() || !googleCx.trim()}
+                key={id}
+                className="btn btn--quiet"
                 onClick={() => {
-                  setGoogleConfig({ key: googleKey.trim(), cx: googleCx.trim() })
-                  setGoogleOn(true)
-                  setGoogleSetup(false)
+                  setWebConfig(id, null)
+                  setWebEngines((prev) => ({ ...prev, [id]: false }))
                 }}
               >
-                Save
+                {label} connected · Disconnect
               </button>
-              <button className="btn btn--quiet" onClick={() => setGoogleSetup(false)}>Cancel</button>
-            </div>
-          </div>
-        ) : googleOn ? (
-          <button
-            className="btn btn--quiet"
-            onClick={() => {
-              setGoogleConfig(null)
-              setGoogleOn(false)
-            }}
-          >
-            Google Search connected · Disconnect
-          </button>
-        ) : (
-          <button className="btn btn--quiet" onClick={() => setGoogleSetup(true)}>
-            + Also search Google (optional)
-          </button>
-        )}
+            ) : (
+              <button key={id} className="btn btn--quiet" onClick={() => { setWebSetup(id); setWebKey(''); setWebCx('') }}>
+                + {label} Search
+              </button>
+            )
+          )}
+        </div>
 
         {findError && <div className="find-msg">{findError}</div>}
 

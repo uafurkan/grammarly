@@ -1,10 +1,22 @@
-// Finds real sources for a passage using free, CORS-enabled scholarly APIs
-// (OpenAlex + Crossref) — no API key, no server — plus Google Programmable
-// Search when the user connects their own key. Results are scored against the
-// passage with the same keyword-overlap (Jaccard) the originality check uses,
-// so the "match %" is honest, not invented.
+// Finds real sources for a passage. Always searches:
+//   OpenAlex, Crossref, Semantic Scholar, arXiv, Europe PMC, DOAJ
+// Optionally (user provides their own key, stored only in localStorage):
+//   Google Programmable Search, Brave Search, Serper (Google), Bing Web Search
+// All results are scored with the same honest Jaccard keyword-overlap metric.
 
 import { contentWordSet, jaccard } from './originality'
+
+export type SourceVia =
+  | 'OpenAlex'
+  | 'Crossref'
+  | 'SemanticScholar'
+  | 'arXiv'
+  | 'EuropePMC'
+  | 'DOAJ'
+  | 'Google'
+  | 'Brave'
+  | 'Serper'
+  | 'Bing'
 
 export interface FoundSource {
   id: string
@@ -14,50 +26,48 @@ export interface FoundSource {
   url: string
   abstract: string
   similarity: number // 0..1
-  via: 'OpenAlex' | 'Crossref' | 'Google'
+  via: SourceVia
 }
 
-// --- optional Google Custom Search (needs the user's own API key + cx) ------
+// ---------------------------------------------------------------------------
+// Optional web-search engines (each needs the user's own API key)
+// ---------------------------------------------------------------------------
 
-const GOOGLE_KEY_STORAGE = 'pluma.google-cse.v1'
+type WebEngineId = 'google' | 'brave' | 'serper' | 'bing'
 
-export interface GoogleCseConfig {
+interface WebEngineConfig {
   key: string
-  cx: string
+  cx?: string // Google only
 }
 
-export function getGoogleConfig(): GoogleCseConfig | null {
+function storageKey(engine: WebEngineId) {
+  return `pluma.web-search.${engine}.v1`
+}
+
+export function getWebConfig(engine: WebEngineId): WebEngineConfig | null {
   try {
-    const raw = localStorage.getItem(GOOGLE_KEY_STORAGE)
+    const raw = localStorage.getItem(storageKey(engine))
     if (!raw) return null
-    const cfg = JSON.parse(raw) as GoogleCseConfig
-    return cfg.key && cfg.cx ? cfg : null
+    const cfg = JSON.parse(raw) as WebEngineConfig
+    return cfg.key ? cfg : null
   } catch {
     return null
   }
 }
 
-export function setGoogleConfig(cfg: GoogleCseConfig | null) {
-  if (!cfg || !cfg.key || !cfg.cx) localStorage.removeItem(GOOGLE_KEY_STORAGE)
-  else localStorage.setItem(GOOGLE_KEY_STORAGE, JSON.stringify(cfg))
+export function setWebConfig(engine: WebEngineId, cfg: WebEngineConfig | null) {
+  if (!cfg?.key) localStorage.removeItem(storageKey(engine))
+  else localStorage.setItem(storageKey(engine), JSON.stringify(cfg))
 }
 
-async function searchGoogle(query: string, cfg: GoogleCseConfig, signal: AbortSignal): Promise<FoundSource[]> {
-  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(cfg.key)}&cx=${encodeURIComponent(cfg.cx)}&q=${encodeURIComponent(query)}&num=8`
-  const res = await fetch(url, { signal })
-  if (!res.ok) return []
-  const data = (await res.json()) as { items?: { title?: string; link?: string; snippet?: string }[] }
-  return (data.items ?? []).map((it, i) => ({
-    id: it.link ?? `g${i}`,
-    title: it.title ?? 'Untitled',
-    authors: '',
-    year: null,
-    url: it.link ?? '',
-    abstract: it.snippet ?? '',
-    similarity: 0,
-    via: 'Google' as const,
-  }))
-}
+// Backwards-compat helpers used by existing UI code
+export const getGoogleConfig = () => getWebConfig('google')
+export const setGoogleConfig = (cfg: { key: string; cx: string } | null) =>
+  setWebConfig('google', cfg)
+
+// ---------------------------------------------------------------------------
+// Free academic searches (no key needed)
+// ---------------------------------------------------------------------------
 
 const STOP = new Set([
   'the', 'and', 'for', 'that', 'this', 'with', 'from', 'are', 'was', 'were',
@@ -66,7 +76,6 @@ const STOP = new Set([
   'its', 'our', 'your', 'his', 'her', 'will', 'would', 'can', 'could', 'should',
 ])
 
-/** Pulls the most informative terms from a passage to build a search query. */
 export function keyTerms(text: string, max = 12): string[] {
   const freq = new Map<string, number>()
   for (const m of text.toLowerCase().matchAll(/[\p{L}][\p{L}-]{3,}/gu)) {
@@ -127,15 +136,188 @@ async function searchCrossref(query: string, signal: AbortSignal): Promise<Found
   }))
 }
 
-/**
- * Searches the academic databases for a passage and returns sources ranked by
- * keyword overlap with the passage. `minSimilarity` filters weak matches.
- */
+async function searchSemanticScholar(query: string, signal: AbortSignal): Promise<FoundSource[]> {
+  const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&fields=title,authors,year,abstract,externalIds,openAccessPdf&limit=8`
+  const res = await fetch(url, { signal })
+  if (!res.ok) return []
+  const data = (await res.json()) as { data?: SsWork[] }
+  return (data.data ?? []).map((w) => {
+    const doi = w.externalIds?.DOI
+    const arxiv = w.externalIds?.ArXiv
+    const pdfUrl = w.openAccessPdf?.url
+    const fallback = doi ? `https://doi.org/${doi}` : arxiv ? `https://arxiv.org/abs/${arxiv}` : pdfUrl ?? ''
+    return {
+      id: w.paperId,
+      title: w.title ?? 'Untitled',
+      authors:
+        (w.authors ?? []).slice(0, 3).map((a) => a.name).filter(Boolean).join(', ') +
+        ((w.authors?.length ?? 0) > 3 ? ', et al.' : ''),
+      year: w.year ?? null,
+      url: fallback,
+      abstract: (w.abstract ?? '').slice(0, 1500),
+      similarity: 0,
+      via: 'SemanticScholar' as const,
+    }
+  })
+}
+
+async function searchArXiv(query: string, signal: AbortSignal): Promise<FoundSource[]> {
+  const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&max_results=8&sortBy=relevance`
+  const res = await fetch(url, { signal })
+  if (!res.ok) return []
+  const xml = await res.text()
+  const doc = new DOMParser().parseFromString(xml, 'application/xml')
+  return Array.from(doc.querySelectorAll('entry')).map((e, i) => {
+    const get = (tag: string) => e.querySelector(tag)?.textContent?.trim() ?? ''
+    const id = get('id') || `ax${i}`
+    const authors = Array.from(e.querySelectorAll('author name'))
+      .slice(0, 3)
+      .map((n) => n.textContent?.trim() ?? '')
+      .filter(Boolean)
+      .join(', ')
+    const published = get('published')
+    const year = published ? parseInt(published.slice(0, 4), 10) : null
+    return {
+      id,
+      title: get('title').replace(/\s+/g, ' '),
+      authors,
+      year: isNaN(year!) ? null : year,
+      url: id.startsWith('http') ? id : `https://arxiv.org/abs/${id}`,
+      abstract: get('summary').replace(/\s+/g, ' ').slice(0, 1500),
+      similarity: 0,
+      via: 'arXiv' as const,
+    }
+  })
+}
+
+async function searchEuropePMC(query: string, signal: AbortSignal): Promise<FoundSource[]> {
+  const url = `https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=8&resultType=core`
+  const res = await fetch(url, { signal })
+  if (!res.ok) return []
+  const data = (await res.json()) as { resultList?: { result?: EpmcResult[] } }
+  return (data.resultList?.result ?? []).map((r) => ({
+    id: r.pmid ?? r.doi ?? r.id ?? Math.random().toString(),
+    title: r.title ?? 'Untitled',
+    authors: r.authorString ?? '',
+    year: r.pubYear ? parseInt(r.pubYear, 10) : null,
+    url: r.doi ? `https://doi.org/${r.doi}` : r.pmid ? `https://pubmed.ncbi.nlm.nih.gov/${r.pmid}/` : '',
+    abstract: (r.abstractText ?? '').slice(0, 1500),
+    similarity: 0,
+    via: 'EuropePMC' as const,
+  }))
+}
+
+async function searchDOAJ(query: string, signal: AbortSignal): Promise<FoundSource[]> {
+  const url = `https://doaj.org/api/search/articles/${encodeURIComponent(query)}?pageSize=8`
+  const res = await fetch(url, { signal })
+  if (!res.ok) return []
+  const data = (await res.json()) as { results?: DoajResult[] }
+  return (data.results ?? []).map((r) => {
+    const bib = r.bibjson
+    const doi = bib?.identifier?.find((x) => x.type === 'doi')?.id
+    const link = bib?.link?.find((x) => x.type === 'fulltext')?.url ?? (doi ? `https://doi.org/${doi}` : '')
+    return {
+      id: r.id ?? doi ?? Math.random().toString(),
+      title: bib?.title ?? 'Untitled',
+      authors: (bib?.author ?? []).slice(0, 3).map((a) => a.name).filter(Boolean).join(', '),
+      year: bib?.year ? parseInt(bib.year, 10) : null,
+      url: link,
+      abstract: (bib?.abstract ?? '').slice(0, 1500),
+      similarity: 0,
+      via: 'DOAJ' as const,
+    }
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Optional keyed web searches
+// ---------------------------------------------------------------------------
+
+async function searchGoogle(query: string, cfg: WebEngineConfig, signal: AbortSignal): Promise<FoundSource[]> {
+  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(cfg.key)}&cx=${encodeURIComponent(cfg.cx ?? '')}&q=${encodeURIComponent(query)}&num=8`
+  const res = await fetch(url, { signal })
+  if (!res.ok) return []
+  const data = (await res.json()) as { items?: { title?: string; link?: string; snippet?: string }[] }
+  return (data.items ?? []).map((it, i) => ({
+    id: it.link ?? `g${i}`,
+    title: it.title ?? 'Untitled',
+    authors: '',
+    year: null,
+    url: it.link ?? '',
+    abstract: it.snippet ?? '',
+    similarity: 0,
+    via: 'Google' as const,
+  }))
+}
+
+async function searchBrave(query: string, cfg: WebEngineConfig, signal: AbortSignal): Promise<FoundSource[]> {
+  const res = await fetch(
+    `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=8`,
+    { signal, headers: { 'X-Subscription-Token': cfg.key, Accept: 'application/json' } },
+  )
+  if (!res.ok) return []
+  const data = (await res.json()) as { web?: { results?: { title?: string; url?: string; description?: string }[] } }
+  return (data.web?.results ?? []).map((it, i) => ({
+    id: it.url ?? `br${i}`,
+    title: it.title ?? 'Untitled',
+    authors: '',
+    year: null,
+    url: it.url ?? '',
+    abstract: it.description ?? '',
+    similarity: 0,
+    via: 'Brave' as const,
+  }))
+}
+
+async function searchSerper(query: string, cfg: WebEngineConfig, signal: AbortSignal): Promise<FoundSource[]> {
+  const res = await fetch('https://google.serper.dev/search', {
+    method: 'POST',
+    signal,
+    headers: { 'X-API-KEY': cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ q: query, num: 8 }),
+  })
+  if (!res.ok) return []
+  const data = (await res.json()) as { organic?: { title?: string; link?: string; snippet?: string }[] }
+  return (data.organic ?? []).map((it, i) => ({
+    id: it.link ?? `sr${i}`,
+    title: it.title ?? 'Untitled',
+    authors: '',
+    year: null,
+    url: it.link ?? '',
+    abstract: it.snippet ?? '',
+    similarity: 0,
+    via: 'Serper' as const,
+  }))
+}
+
+async function searchBing(query: string, cfg: WebEngineConfig, signal: AbortSignal): Promise<FoundSource[]> {
+  const res = await fetch(
+    `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(query)}&count=8`,
+    { signal, headers: { 'Ocp-Apim-Subscription-Key': cfg.key } },
+  )
+  if (!res.ok) return []
+  const data = (await res.json()) as { webPages?: { value?: { name?: string; url?: string; snippet?: string }[] } }
+  return (data.webPages?.value ?? []).map((it, i) => ({
+    id: it.url ?? `bi${i}`,
+    title: it.name ?? 'Untitled',
+    authors: '',
+    year: null,
+    url: it.url ?? '',
+    abstract: it.snippet ?? '',
+    similarity: 0,
+    via: 'Bing' as const,
+  }))
+}
+
+// ---------------------------------------------------------------------------
+// Main entry point
+// ---------------------------------------------------------------------------
+
 export async function findSources(
   passage: string,
   opts: { minSimilarity?: number; limit?: number; timeoutMs?: number } = {},
 ): Promise<FoundSource[]> {
-  const { minSimilarity = 0.04, limit = 8, timeoutMs = 12000 } = opts
+  const { minSimilarity = 0.04, limit = 10, timeoutMs = 14000 } = opts
   const query = keyTerms(passage).join(' ')
   if (query.length < 4) return []
 
@@ -143,12 +325,23 @@ export async function findSources(
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   let results: FoundSource[] = []
   try {
-    const google = getGoogleConfig()
     const searches: Promise<FoundSource[]>[] = [
       searchOpenAlex(query, controller.signal),
       searchCrossref(query, controller.signal),
+      searchSemanticScholar(query, controller.signal),
+      searchArXiv(query, controller.signal),
+      searchEuropePMC(query, controller.signal),
+      searchDOAJ(query, controller.signal),
     ]
+    const google = getWebConfig('google')
+    const brave = getWebConfig('brave')
+    const serper = getWebConfig('serper')
+    const bing = getWebConfig('bing')
     if (google) searches.push(searchGoogle(query, google, controller.signal))
+    if (brave) searches.push(searchBrave(query, brave, controller.signal))
+    if (serper) searches.push(searchSerper(query, serper, controller.signal))
+    if (bing) searches.push(searchBing(query, bing, controller.signal))
+
     const settled = await Promise.allSettled(searches)
     results = settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []))
   } finally {
@@ -157,7 +350,7 @@ export async function findSources(
 
   const passageWords = contentWordSet(passage)
   const seen = new Set<string>()
-  const scored = results
+  return results
     .filter((r) => {
       const key = r.title.toLowerCase().replace(/\s+/g, ' ').trim()
       if (seen.has(key) || !r.title || r.title === 'Untitled') return false
@@ -171,9 +364,11 @@ export async function findSources(
     .filter((r) => r.similarity >= minSimilarity)
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit)
-
-  return scored
 }
+
+// ---------------------------------------------------------------------------
+// Type helpers
+// ---------------------------------------------------------------------------
 
 interface OpenAlexWork {
   id: string
@@ -193,4 +388,36 @@ interface CrossrefItem {
   abstract?: string
   author?: { given?: string; family?: string }[]
   issued?: { 'date-parts'?: number[][] }
+}
+
+interface SsWork {
+  paperId: string
+  title?: string
+  abstract?: string
+  year?: number
+  authors?: { name: string }[]
+  externalIds?: { DOI?: string; ArXiv?: string }
+  openAccessPdf?: { url: string }
+}
+
+interface EpmcResult {
+  id?: string
+  pmid?: string
+  doi?: string
+  title?: string
+  authorString?: string
+  pubYear?: string
+  abstractText?: string
+}
+
+interface DoajResult {
+  id?: string
+  bibjson?: {
+    title?: string
+    abstract?: string
+    year?: string
+    author?: { name: string }[]
+    link?: { url: string; type: string }[]
+    identifier?: { type: string; id: string }[]
+  }
 }

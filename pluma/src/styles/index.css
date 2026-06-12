@@ -385,6 +385,7 @@ select.dialect {
 /* ---------- source finder ---------- */
 .find-box { margin-top: 12px; }
 .find-note { font-size: 11.5px; color: var(--faint); margin: 8px 2px 0; line-height: 1.45; }
+.web-engines { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .find-msg {
   font-size: 13px;
   color: var(--muted);
