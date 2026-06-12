@@ -23,8 +23,8 @@ const repeatedWord = regexRule(
         },
 )
 
-const doubleSpace = regexRule('en.double-space', ALL_EN, /(?<=\S) {2,}(?=\S)/g, () => ({
-  replacements: [' '],
+const doubleSpace = regexRule('en.double-space', ALL_EN, /\S {2,}\S/g, (m) => ({
+  replacements: [m[0][0] + ' ' + m[0][m[0].length - 1]],
   category: 'clarity',
   message: 'Multiple spaces — one is enough.',
 }))
@@ -54,22 +54,43 @@ const articleAn = regexRule('en.a-vs-an', ALL_EN, /\b(a|an) ([a-z]+)/gi, (m) => 
   return null
 })
 
-const lonelyI = regexRule('en.lowercase-i', ALL_EN, /(?<=^|[\s(])i(?=[\s,.!?;:)']|$)/gm, () => ({
-  replacements: ['I'],
-  category: 'correctness',
-  message: 'The pronoun “I” is always capitalized.',
-}))
+const lonelyI: Rule = {
+  id: 'en.lowercase-i',
+  dialects: ALL_EN,
+  apply(text) {
+    const out: import('../types').RuleMatch[] = []
+    const re = /(^|[\s(])(i)([\s,.!?;:)']|$)/gm
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text)) !== null) {
+      const begin = m.index + m[1].length
+      out.push({ begin, end: begin + 1, text: 'i', replacements: ['I'], category: 'correctness', message: 'The pronoun “I” is always capitalized.' })
+    }
+    return out
+  },
+}
 
-const sentenceCase = regexRule(
-  'en.sentence-capital',
-  ALL_EN,
-  /(?<=[.!?]\s+)([a-z])(?=[a-z]*\b)/g,
-  (m) => ({
-    replacements: [m[1].toUpperCase()],
-    category: 'correctness',
-    message: 'Sentences begin with a capital letter.',
-  }),
-)
+// avoid lookbehind (not on iOS < 16): match [.!?] + space + lowercase first char
+const sentenceCase: Rule = {
+  id: 'en.sentence-capital',
+  dialects: ALL_EN,
+  apply(text) {
+    const out: import('../types').RuleMatch[] = []
+    const re = /[.!?]\s+([a-z])([a-z]*)/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text)) !== null) {
+      const begin = m.index + m[0].length - m[1].length - m[2].length
+      out.push({
+        begin,
+        end: begin + m[1].length,
+        text: m[1],
+        replacements: [m[1].toUpperCase()],
+        category: 'correctness',
+        message: 'Sentences begin with a capital letter.',
+      })
+    }
+    return out
+  },
+}
 
 const SV_MAP: Record<string, string> = {
   go: 'goes', do: 'does', have: 'has', want: 'wants', need: 'needs',
@@ -342,14 +363,7 @@ const doSupportBase = regexRule(
   },
 )
 
-// missing sentence-ending punctuation before a clear new capitalised sentence
-const runOn = regexRule(
-  'en.run-on',
-  ALL_EN,
-  /[a-z]{2,}\s+(?=[A-Z][a-z]+\s+(?:I|the|he|she|they|we|it|this|that|then|after|when|but)\b)/g,
-  () => null, // disabled by default (high false-positive); kept as a documented hook
-)
-void runOn
+// (run-on rule removed — high false-positive, not in the active list)
 
 // ---------------------------------------------------------------------------
 // Clarity — passive voice
@@ -463,12 +477,14 @@ const longSentence: Rule = {
   dialects: ALL_EN,
   apply(text) {
     const out: import('../types').RuleMatch[] = []
-    for (const m of text.matchAll(/[^.!?]+[.!?]/g)) {
+    const re = /[^.!?]+[.!?]/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text)) !== null) {
       const words = m[0].trim().split(/\s+/).length
       if (words > 45) {
         out.push({
-          begin: m.index!,
-          end: m.index! + m[0].length,
+          begin: m.index,
+          end: m.index + m[0].length,
           text: m[0].trim().slice(0, 60) + '…',
           replacements: [],
           category: 'clarity',

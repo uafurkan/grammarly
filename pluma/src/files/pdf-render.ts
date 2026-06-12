@@ -52,35 +52,58 @@ export async function renderPage(
   ctx.scale(ratio, ratio)
   await page.render({ canvas, canvasContext: ctx, viewport }).promise
 
-  const content = await page.getTextContent()
+  let rawContent: { items?: unknown[] } = { items: [] }
+  try {
+    rawContent = (await page.getTextContent()) as typeof rawContent
+  } catch {
+    // some PDFs have malformed content streams — treat as image-only
+  }
   const items: TextItemBox[] = []
   let text = ''
   const offsets: number[] = []
 
-  for (const item of content.items) {
-    if (!('str' in item) || !item.str) continue
-    const t = pdfjs.Util.transform(viewport.transform, item.transform)
-    const fontSize = Math.hypot(t[2], t[3])
-    const width = item.width * scale
-    const left = t[4]
-    const top = t[5] - fontSize
-    const pdfFontSize = Math.hypot(item.transform[2], item.transform[3])
+  for (const item of (rawContent.items ?? [])) {
+    try {
+      if (typeof item !== 'object' || item === null) continue
+      const it = item as Record<string, unknown>
+      if (typeof it.str !== 'string' || !it.str) continue
+      const transform = Array.isArray(it.transform) ? (it.transform as number[]) : null
+      if (!transform || transform.length < 6) continue
 
-    if (text) text += ' '
-    offsets.push(text.length)
-    text += item.str
-    items.push({
-      str: item.str,
-      left,
-      top,
-      width,
-      height: fontSize * 1.2,
-      fontSize,
-      pdfX: item.transform[4],
-      pdfY: item.transform[5],
-      pdfFontSize,
-      pdfWidth: item.width,
-    })
+      // manual 2-D matrix multiply so we don't depend on Util.transform API stability
+      const vt = viewport.transform as number[]
+      const t = [
+        vt[0] * transform[0] + vt[2] * transform[1],
+        vt[1] * transform[0] + vt[3] * transform[1],
+        vt[0] * transform[2] + vt[2] * transform[3],
+        vt[1] * transform[2] + vt[3] * transform[3],
+        vt[0] * transform[4] + vt[2] * transform[5] + vt[4],
+        vt[1] * transform[4] + vt[3] * transform[5] + vt[5],
+      ]
+      const fontSize = Math.hypot(t[2], t[3])
+      const width = (typeof it.width === 'number' ? it.width : 0) * scale
+      const left = t[4]
+      const top = t[5] - fontSize
+      const pdfFontSize = Math.hypot(transform[2], transform[3])
+
+      if (text) text += ' '
+      offsets.push(text.length)
+      text += it.str
+      items.push({
+        str: it.str,
+        left,
+        top,
+        width,
+        height: fontSize * 1.2,
+        fontSize,
+        pdfX: transform[4],
+        pdfY: transform[5],
+        pdfFontSize,
+        pdfWidth: typeof it.width === 'number' ? it.width : 0,
+      })
+    } catch {
+      // skip unparseable items; the page still renders from canvas
+    }
   }
 
   return {

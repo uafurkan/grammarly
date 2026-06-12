@@ -99,9 +99,10 @@ export function analyzeText(text: string): WritingAnalytics {
     }
   }
 
-  // Split into sentences
+  // Split into sentences (avoid lookbehind — not available on old iOS Safari)
   const sentenceList = trimmed
-    .split(/(?<=[.!?])\s+|(?<=[.!?])$/)
+    .replace(/([.!?])\s+/g, '$1\x00')
+    .split('\x00')
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
   const sentences = Math.max(1, sentenceList.length)
