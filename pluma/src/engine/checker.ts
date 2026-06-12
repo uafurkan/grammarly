@@ -1,40 +1,61 @@
-// Tier-1 checker: deterministic rules, runs locally in well under a frame for
-// typical documents. Tier-2/3 (server GEC models, LLM rewrites) plug in behind
-// the same Alert interface — see GRAMMARLY_ANALYSIS.md §6.
+// Tier-1 checker. Rules run instantly on the main thread; the dictionary
+// spell-check (large Hunspell data) runs in a Web Worker via checkAsync so it
+// never blocks typing. Both emit the same Alert shape (GRAMMARLY_ANALYSIS.md §6).
 
 import type { Alert, Dialect } from './types'
-import { langOf } from './types'
-import { EN_RULES } from './rules/en'
-import { ES_RULES } from './rules/es'
+import { runRules, resolveOverlaps } from './run'
 
-const MAX_ALERTS = 200
-
-let counter = 0
-
+/** Synchronous, rules-only check (no dictionary). Used as instant fallback. */
 export function check(text: string, dialect: Dialect): Alert[] {
-  const rules = (langOf(dialect) === 'en' ? EN_RULES : ES_RULES).filter((r) =>
-    r.dialects.includes(dialect),
-  )
+  return resolveOverlaps(runRules(text, dialect))
+}
 
-  const alerts: Alert[] = []
-  for (const rule of rules) {
-    for (const m of rule.apply(text, dialect)) {
-      alerts.push({ id: `a${++counter}`, ruleId: rule.id, ...m })
+// --- Worker-backed async check (rules + dictionary spell-check) ------------
+
+interface PendingReq {
+  resolve: (alerts: Alert[]) => void
+}
+
+let worker: Worker | null = null
+let reqSeq = 0
+const pending = new Map<number, PendingReq>()
+
+function getWorker(): Worker | null {
+  if (worker) return worker
+  if (typeof Worker === 'undefined') return null
+  try {
+    worker = new Worker(new URL('./checker.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (e: MessageEvent) => {
+      const { reqId, alerts } = e.data as { reqId: number; alerts: Alert[] }
+      const req = pending.get(reqId)
+      if (req) {
+        pending.delete(reqId)
+        req.resolve(alerts)
+      }
     }
+    worker.onerror = () => {
+      // on a worker failure, drain pending with empty so callers don't hang
+      for (const [, req] of pending) req.resolve([])
+      pending.clear()
+    }
+  } catch {
+    worker = null
   }
+  return worker
+}
 
-  // Overlap resolution: shortest alerts win, so a sentence-wide alert (e.g.
-  // "missing ¿") never swallows the word-level fixes inside it — those surface
-  // first, and the wide alert reappears once they're resolved.
-  const bySize = [...alerts].sort((a, b) => a.end - a.begin - (b.end - b.begin))
-  const kept: Alert[] = []
-  for (const a of bySize) {
-    if (kept.some((k) => a.begin < k.end && k.begin < a.end)) continue
-    kept.push(a)
-    if (kept.length >= MAX_ALERTS) break
-  }
-
-  return kept.sort((a, b) => a.begin - b.begin || a.end - b.end)
+/**
+ * Full check: rules + dictionary spell-check, off the main thread. Falls back
+ * to the synchronous rules-only check if a worker isn't available.
+ */
+export function checkAsync(text: string, dialect: Dialect, personal: string[] = []): Promise<Alert[]> {
+  const w = getWorker()
+  if (!w) return Promise.resolve(check(text, dialect))
+  const reqId = ++reqSeq
+  return new Promise<Alert[]>((resolve) => {
+    pending.set(reqId, { resolve })
+    w.postMessage({ reqId, text, dialect, personal })
+  })
 }
 
 /** Stable fingerprint so a dismissed alert stays dismissed across re-checks. */

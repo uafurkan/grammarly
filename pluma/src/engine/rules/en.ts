@@ -1,32 +1,8 @@
-import type { Rule, RuleMatch, Dialect } from '../types'
+import type { Rule, Dialect } from '../types'
+import { regexRule, matchCase } from './shared'
+import { BAD_PAST, BAD_PARTICIPLE, BAD_PLURAL, THIRD_PERSON } from '../data/grammar-en'
 
 const ALL_EN: Dialect[] = ['en-US', 'en-GB']
-
-function regexRule(
-  id: string,
-  dialects: Dialect[],
-  pattern: RegExp,
-  build: (m: RegExpExecArray) => Omit<RuleMatch, 'begin' | 'end' | 'text'> | null,
-): Rule {
-  return {
-    id,
-    dialects,
-    apply(text) {
-      const out: RuleMatch[] = []
-      const re = new RegExp(pattern.source, pattern.flags)
-      let m: RegExpExecArray | null
-      while ((m = re.exec(text)) !== null) {
-        if (m[0].length === 0) {
-          re.lastIndex++
-          continue
-        }
-        const built = build(m)
-        if (built) out.push({ begin: m.index, end: m.index + m[0].length, text: m[0], ...built })
-      }
-      return out
-    },
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Correctness
@@ -220,11 +196,160 @@ function dialectSpelling(id: string, dialect: Dialect, map: Record<string, strin
   })
 }
 
-function matchCase(source: string, target: string): string {
-  if (source === source.toUpperCase() && source.length > 1) return target.toUpperCase()
-  if (source[0] === source[0].toUpperCase()) return target[0].toUpperCase() + target.slice(1)
-  return target
-}
+// ---------------------------------------------------------------------------
+// Morphology: irregular verbs, agreement, plurals (the depth Grammarly has)
+// ---------------------------------------------------------------------------
+
+// "goed" → "went", "buyed" → "bought", …
+const badPast = regexRule(
+  'en.irregular-past',
+  ALL_EN,
+  new RegExp(`\\b(${Object.keys(BAD_PAST).join('|')})\\b`, 'gi'),
+  (m) => {
+    const fix = BAD_PAST[m[1].toLowerCase()]
+    return fix
+      ? { replacements: [matchCase(m[1], fix)], category: 'correctness', message: `Irregular past tense — “${fix}”.` }
+      : null
+  },
+)
+
+// "have went" → "have gone"
+const badParticiple = regexRule(
+  'en.bad-participle',
+  ALL_EN,
+  new RegExp(`\\b(have|has|had|having)\\s+(${Object.keys(BAD_PARTICIPLE).join('|')})\\b`, 'gi'),
+  (m) => {
+    const fix = BAD_PARTICIPLE[m[2].toLowerCase()]
+    return fix
+      ? {
+          replacements: [`${m[1]} ${matchCase(m[2], fix)}`],
+          category: 'correctness',
+          message: `After “${m[1].toLowerCase()}”, use the past participle “${fix}”.`,
+        }
+      : null
+  },
+)
+
+// "peoples" → "people"
+const badPlural = regexRule(
+  'en.irregular-plural',
+  ALL_EN,
+  new RegExp(`\\b(${Object.keys(BAD_PLURAL).join('|')})\\b`, 'gi'),
+  (m) => {
+    const fix = BAD_PLURAL[m[1].toLowerCase()]
+    return fix
+      ? { replacements: [matchCase(m[1], fix)], category: 'correctness', message: `“${fix}” is already plural (or uncountable).` }
+      : null
+  },
+)
+
+// be-agreement: "they was" → "they were", "we was" → "we were", "I were" → "I was",
+// "it were" → "it was", "he were" → "he was".
+const PLURAL_SUBJ = /\b(we|they|you|these|those)\s+(was)\b/gi
+const SING_SUBJ = /\b(i|he|she|it|this|that)\s+(were)\b/gi
+
+const wasWerePlural = regexRule('en.was-were-plural', ALL_EN, PLURAL_SUBJ, (m) => ({
+  replacements: [`${m[1]} were`],
+  category: 'correctness',
+  message: `“${m[1].toLowerCase()}” takes “were”, not “was”.`,
+}))
+
+const wasWereSingular = regexRule('en.were-was-singular', ALL_EN, SING_SUBJ, (m) => ({
+  replacements: [`${m[1]} ${m[1].toLowerCase() === 'i' ? 'was' : 'was'}`],
+  category: 'correctness',
+  message: `“${m[1]}” takes “was”, not “were”.`,
+}))
+
+// "the weather were" → "was": a singular common noun directly before were.
+const nounWere = regexRule(
+  'en.noun-were',
+  ALL_EN,
+  /\b(the|this|that|a|an|his|her|its|my|your|our|their)\s+([a-z]+)\s+(were)\b/gi,
+  (m) => {
+    const noun = m[2].toLowerCase()
+    if (/s$/.test(noun) || ['people', 'police', 'children', 'men', 'women'].includes(noun)) return null
+    return {
+      replacements: [`${m[1]} ${m[2]} was`],
+      category: 'correctness',
+      message: `Singular subject “${m[1]} ${m[2]}” takes “was”.`,
+    }
+  },
+)
+
+// third-person singular present: "he go" → "he goes", "she don't" → "she doesn't"
+const verbsAlt = Object.keys(THIRD_PERSON).join('|')
+const thirdPersonS = regexRule(
+  'en.third-person-s',
+  ALL_EN,
+  new RegExp(`\\b(he|she|it)\\s+(${verbsAlt})\\b`, 'gi'),
+  (m) => {
+    const fix = THIRD_PERSON[m[2].toLowerCase()]
+    return fix
+      ? {
+          replacements: [`${m[1]} ${matchCase(m[2], fix)}`],
+          category: 'correctness',
+          message: `“${m[1]}” takes the -s form: “${fix}”.`,
+        }
+      : null
+  },
+)
+
+// plural subject + 3rd-person -s verb: "we goes" → "we go", "they likes" → "they like"
+const THIRD_TO_BASE: Record<string, string> = Object.fromEntries(
+  Object.entries(THIRD_PERSON).map(([base, third]) => [third, base]),
+)
+const pluralVerbAgreement = regexRule(
+  'en.plural-verb',
+  ALL_EN,
+  new RegExp(`\\b(we|they|you|i)\\s+(${Object.values(THIRD_PERSON).join('|')})\\b`, 'gi'),
+  (m) => {
+    const base = THIRD_TO_BASE[m[2].toLowerCase()]
+    if (!base) return null
+    return {
+      replacements: [`${m[1]} ${matchCase(m[2], base)}`],
+      category: 'correctness',
+      message: `“${m[1].toLowerCase()}” takes the base form: “${base}”.`,
+    }
+  },
+)
+
+// "he don't" / "she don't" → "doesn't"; "don't likes" → "doesn't like" handled below
+const dontDoesnt = regexRule(
+  'en.dont-doesnt',
+  ALL_EN,
+  /\b(he|she|it)\s+(don't|do not)\b/gi,
+  (m) => ({
+    replacements: [`${m[1]} ${m[2].toLowerCase() === "don't" ? "doesn't" : 'does not'}`],
+    category: 'correctness',
+    message: `“${m[1]}” takes “doesn't”, not “don't”.`,
+  }),
+)
+
+// "doesn't likes" / "don't likes" → base verb after do-support
+const doSupportBase = regexRule(
+  'en.do-support-base',
+  ALL_EN,
+  new RegExp(`\\b(don't|doesn't|didn't|do not|does not|did not)\\s+([a-z]+s)\\b`, 'gi'),
+  (m) => {
+    const v = m[2].toLowerCase()
+    const base = Object.entries(THIRD_PERSON).find(([, third]) => third === v)?.[0]
+    if (!base) return null
+    return {
+      replacements: [`${m[1]} ${matchCase(m[2], base)}`],
+      category: 'correctness',
+      message: `After “${m[1].toLowerCase()}”, use the base form “${base}”.`,
+    }
+  },
+)
+
+// missing sentence-ending punctuation before a clear new capitalised sentence
+const runOn = regexRule(
+  'en.run-on',
+  ALL_EN,
+  /[a-z]{2,}\s+(?=[A-Z][a-z]+\s+(?:I|the|he|she|they|we|it|this|that|then|after|when|but)\b)/g,
+  () => null, // disabled by default (high false-positive); kept as a documented hook
+)
+void runOn
 
 export const EN_RULES: Rule[] = [
   repeatedWord,
@@ -233,6 +358,16 @@ export const EN_RULES: Rule[] = [
   lonelyI,
   sentenceCase,
   subjectVerb,
+  thirdPersonS,
+  pluralVerbAgreement,
+  dontDoesnt,
+  doSupportBase,
+  badPast,
+  badParticiple,
+  badPlural,
+  wasWerePlural,
+  wasWereSingular,
+  nounWere,
   COULD_OF,
   misspelling,
   contraction,

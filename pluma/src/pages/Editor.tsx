@@ -4,7 +4,8 @@ import { EditorContent, useEditor, type Editor as TTEditor } from '@tiptap/react
 import { buildExtensions } from '../editor/extensions'
 import { alertRange, docText, suggestionsKey } from '../editor/suggestions-plugin'
 import { originalityKey, overlapRange } from '../editor/originality-plugin'
-import { check, fingerprint } from '../engine/checker'
+import { check, checkAsync, fingerprint } from '../engine/checker'
+import { addPersonalWord, getPersonalWords } from '../engine/personal'
 import { DIALECT_LABELS, type Alert, type Dialect } from '../engine/types'
 import {
   checkOriginality,
@@ -39,17 +40,21 @@ export default function EditorPage() {
   const sourcesRef = useRef(sources)
   sourcesRef.current = sources
   const dismissedRef = useRef<Set<string>>(new Set())
+  const personalRef = useRef<string[]>(getPersonalWords())
   const checkTimer = useRef<number | undefined>(undefined)
   const saveTimer = useRef<number | undefined>(undefined)
 
-  const runCheck = useCallback(() => {
+  const renderAlerts = useCallback((sourceText: string, alerts: Alert[]) => {
     const editor = editorRef.current
     if (!editor) return
+    // re-map offsets against the *current* document (it may have changed while
+    // the worker ran); skip alerts that no longer line up.
     const { text, toPm } = docText(editor.state.doc)
+    if (text !== sourceText) return // a newer check is already queued
 
     const kept: Alert[] = []
     const items: { alert: Alert; from: number; to: number }[] = []
-    for (const a of check(text, dialectRef.current)) {
+    for (const a of alerts) {
       if (dismissedRef.current.has(fingerprint(a))) continue
       if (a.text.includes('\n')) continue
       const from = toPm(a.begin)
@@ -61,14 +66,25 @@ export default function EditorPage() {
 
     setAlerts(kept)
     setActiveId((prev) => (prev && kept.some((a) => a.id === prev) ? prev : null))
-    setCounts({
-      words: text.trim() ? text.trim().split(/\s+/).length : 0,
-      chars: text.replace(/\n/g, '').length,
-    })
     editor.view.dispatch(
       editor.state.tr.setMeta(suggestionsKey, { type: 'set', items, activeId: null }),
     )
   }, [])
+
+  const runCheck = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const { text } = docText(editor.state.doc)
+    setCounts({
+      words: text.trim() ? text.trim().split(/\s+/).length : 0,
+      chars: text.replace(/\n/g, '').length,
+    })
+    // instant rules-only pass, then the richer worker pass (rules + dictionary)
+    renderAlerts(text, check(text, dialectRef.current))
+    checkAsync(text, dialectRef.current, personalRef.current).then((alerts) =>
+      renderAlerts(text, alerts),
+    )
+  }, [renderAlerts])
 
   const runOriginality = useCallback(() => {
     const editor = editorRef.current
@@ -194,6 +210,12 @@ export default function EditorPage() {
 
   const dismiss = (alert: Alert) => {
     dismissedRef.current.add(fingerprint(alert))
+    if (activeId === alert.id) setActiveId(null)
+    runCheck()
+  }
+
+  const addToDictionary = (alert: Alert) => {
+    personalRef.current = addPersonalWord(alert.text)
     if (activeId === alert.id) setActiveId(null)
     runCheck()
   }
@@ -381,6 +403,18 @@ export default function EditorPage() {
                       }}
                     >
                       Accept
+                    </button>
+                  )}
+                  {a.ruleId.endsWith('.spelling') && (
+                    <button
+                      className="btn btn--quiet"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        addToDictionary(a)
+                      }}
+                      title="Add this word to your personal dictionary"
+                    >
+                      Add to dictionary
                     </button>
                   )}
                   <button

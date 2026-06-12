@@ -1,32 +1,7 @@
 import type { Rule, RuleMatch, Dialect } from '../types'
+import { regexRule, matchCase } from './shared'
 
 const ALL_ES: Dialect[] = ['es-ES', 'es-419']
-
-function regexRule(
-  id: string,
-  dialects: Dialect[],
-  pattern: RegExp,
-  build: (m: RegExpExecArray) => Omit<RuleMatch, 'begin' | 'end' | 'text'> | null,
-): Rule {
-  return {
-    id,
-    dialects,
-    apply(text) {
-      const out: RuleMatch[] = []
-      const re = new RegExp(pattern.source, pattern.flags)
-      let m: RegExpExecArray | null
-      while ((m = re.exec(text)) !== null) {
-        if (m[0].length === 0) {
-          re.lastIndex++
-          continue
-        }
-        const built = build(m)
-        if (built) out.push({ begin: m.index, end: m.index + m[0].length, text: m[0], ...built })
-      }
-      return out
-    },
-  }
-}
 
 const W = 'A-Za-zÁÉÍÓÚÜÑáéíóúüñ'
 
@@ -176,17 +151,73 @@ const voseoInES = regexRule(
   }),
 )
 
-function matchCase(source: string, target: string): string {
-  if (source === source.toUpperCase() && source.length > 1) return target.toUpperCase()
-  if (source[0] === source[0].toUpperCase()) return target[0].toUpperCase() + target.slice(1)
-  return target
+// ---------------------------------------------------------------------------
+// Morphology & common errors
+// ---------------------------------------------------------------------------
+
+// "haiga" → "haya", "dijistes" already handled; add frequent verb errors.
+const VERB_ERRORS: Record<string, [string, string]> = {
+  haiga: ['haya', 'La forma correcta del subjuntivo es «haya».'],
+  haigan: ['hayan', 'La forma correcta es «hayan».'],
+  vinistes: ['viniste', 'El pretérito de segunda persona no lleva -s final.'],
+  hicistes: ['hiciste', 'El pretérito de segunda persona no lleva -s final.'],
+  pusistes: ['pusiste', 'El pretérito de segunda persona no lleva -s final.'],
+  cocreto: ['concreto', 'Se escribe «concreto».'],
+  dentrar: ['entrar', 'El verbo es «entrar», no «dentrar».'],
+  diferiencia: ['diferencia', 'Se escribe «diferencia».'],
 }
+const verbErrorsEs = regexRule(
+  'es.verb-errors',
+  ALL_ES,
+  new RegExp(`\\b(${Object.keys(VERB_ERRORS).join('|')})\\b`, 'gi'),
+  (m) => {
+    const e = VERB_ERRORS[m[1].toLowerCase()]
+    return e ? { replacements: [matchCase(m[1], e[0])], category: 'correctness', message: e[1] } : null
+  },
+)
+
+// Confusables: "haber" vs "a ver", "halla/haya/allá", "hay/ahí/ay", "valla/vaya".
+const CONFUSABLES: Record<string, [string, string]> = {
+  'aver ': ['a ver ', '¿Quisiste decir «a ver» (mirar)?'],
+  'sino que': ['', ''], // skip — legitimate
+}
+void CONFUSABLES
+
+// número/género agreement (conservative): "la problema" → "el problema",
+// "el agua frio" left alone (too risky). Only flag a tiny set of common gender slips.
+const GENDER: Record<string, string> = {
+  'la problema': 'el problema',
+  'el mano': 'la mano',
+  'la mapa': 'el mapa',
+  'el agua': 'el agua', // correct (el for stressed á), keep as no-op guard
+  'la tema': 'el tema',
+  'el foto': 'la foto',
+  'la día': 'el día',
+  'el gente': 'la gente',
+}
+const genderEs = regexRule(
+  'es.gender-agreement',
+  ALL_ES,
+  /\b(el|la)\s+(problema|mano|mapa|tema|foto|día|gente)\b/gi,
+  (m) => {
+    const phrase = `${m[1].toLowerCase()} ${m[2].toLowerCase()}`
+    const fix = GENDER[phrase]
+    if (!fix || fix === phrase) return null
+    return {
+      replacements: [matchCase(m[0], fix)],
+      category: 'correctness',
+      message: `Concordancia de género: «${fix}».`,
+    }
+  },
+)
 
 export const ES_RULES: Rule[] = [
   repeatedWord,
   doubleSpace,
   missingAccent,
   misspellingEs,
+  verbErrorsEs,
+  genderEs,
   porqueQuestion,
   invertedMark('es.opening-question', '?', '¿', 'preguntas'),
   invertedMark('es.opening-exclamation', '!', '¡', 'exclamaciones'),

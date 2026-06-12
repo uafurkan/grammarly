@@ -11,10 +11,20 @@ is weakest; the full competitive/technical analysis lives in
 - **Blank-page writing**: "New document" opens a clean page you write and
   format directly in the browser (headings, bold/italic/underline, lists,
   quotes, alignment, undo/redo).
-- **Live checking while you type**: a Tier-1 rules engine runs locally with a
-  500 ms debounce and renders wavy underlines (red = correctness, blue =
-  clarity). Suggestion cards explain every flag; accept or dismiss — dismissed
-  flags stay dismissed.
+- **Live checking while you type**: real-time, fully in-browser (no API key, no
+  server), with a 500 ms debounce and wavy underlines (red = correctness, blue =
+  clarity). Suggestion cards explain every flag; accept, dismiss, or "Add to
+  dictionary". Three layers work together:
+  1. **Real Hunspell dictionaries** (en-US, en-GB, es-ES, es-MX — ~50k stems
+     each, expanding to millions of inflected forms via affix rules) plus an
+     academic/technical supplement, run in a **Web Worker** so they never block
+     typing. Catches non-words like "yoi", "expensiv".
+  2. **Morphology grammar rules**: irregular past tense (goed→went, buyed→bought),
+     subject–verb agreement (they was→were, it were→was, he tell→tells, we
+     goes→go), do-support, irregular plurals (peoples→people), plus Spanish
+     accents, ¿¡, gender and dialect (vosotros/ustedes, voseo).
+  3. **A small on-device ranker** (edit distance + frequency, no neural net) that
+     orders spelling suggestions so the intended word wins (yoi→you).
 - **Dialect-aware**: en-US ↔ en-GB spelling, Spanish missing accents,
   inverted ¿/¡, «por qué» in questions, and peninsular-vs-LatAm usage
   (vosotros/ustedes, voseo) — switchable per document.
