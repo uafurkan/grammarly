@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createDoc } from '../store/documents'
-import { pickAndImport } from '../files/upload'
+import { pickAndImport, routeFor } from '../files/upload'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -18,7 +18,7 @@ export default function Home() {
     navigate(`/doc/${doc.id}`)
   }
 
-  const upload = () => pickAndImport((doc) => navigate(`/doc/${doc.id}`), setNotice)
+  const upload = () => pickAndImport((doc) => navigate(routeFor(doc)), setNotice)
 
   return (
     <div className="home">
@@ -36,7 +36,7 @@ export default function Home() {
         </p>
         <div className="actions">
           <button className="btn btn--primary" onClick={newDoc}>Start writing</button>
-          <button className="btn" onClick={upload}>Open a Word document</button>
+          <button className="btn" onClick={upload}>Open a file — Word, PDF, Excel</button>
         </div>
 
         <div className="notes">
@@ -50,8 +50,9 @@ export default function Home() {
           <div>
             <h3>Room for real work</h3>
             <p>
-              Documents up to 400,000 characters and 25&nbsp;MB — four times
-              what the usual tools allow. Your thesis fits.
+              Word, PDF and Excel files up to 400,000 characters and
+              25&nbsp;MB — four times what the usual tools allow. Your thesis
+              fits.
             </p>
           </div>
           <div>

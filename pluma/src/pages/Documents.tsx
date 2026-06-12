@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { createDoc, listDocs, removeDoc, type DocMeta } from '../store/documents'
+import { createDoc, getDoc, listDocs, removeDoc, type DocMeta } from '../store/documents'
 import { DIALECT_LABELS } from '../engine/types'
-import { pickAndImport } from '../files/upload'
+import { pickAndImport, routeFor } from '../files/upload'
+import { newSheetContent } from '../files/xlsx-import'
 
 export default function Documents() {
   const navigate = useNavigate()
@@ -20,7 +21,12 @@ export default function Documents() {
     navigate(`/doc/${doc.id}`)
   }
 
-  const upload = () => pickAndImport((doc) => navigate(`/doc/${doc.id}`), setNotice)
+  const newSheet = () => {
+    const doc = createDoc({ title: 'Untitled spreadsheet', kind: 'sheet', content: newSheetContent() })
+    navigate(`/sheet/${doc.id}`)
+  }
+
+  const upload = () => pickAndImport((doc) => navigate(routeFor(doc)), setNotice)
 
   const del = (id: string) => {
     removeDoc(id)
@@ -36,24 +42,33 @@ export default function Documents() {
         <div className="head">
           <h1>Documents</h1>
           <div className="row">
-            <button className="btn" onClick={upload}>Open a Word document</button>
+            <button className="btn" onClick={upload}>Open a file</button>
+            <button className="btn" onClick={newSheet}>New spreadsheet</button>
             <button className="btn btn--primary" onClick={newDoc}>New document</button>
           </div>
         </div>
 
         {docs.length === 0 ? (
           <div className="empty">
-            Nothing here yet. Start a new document or open a .docx — it opens
-            as a clean page you can write on right away.
+            Nothing here yet. Start a new document or open a Word, PDF or
+            Excel file — it opens as a clean page you can work on right away.
           </div>
         ) : (
           <div className="doc-list">
             {docs.map((d) => (
-              <div key={d.id} className="doc-card" onClick={() => navigate(`/doc/${d.id}`)}>
+              <div
+                key={d.id}
+                className="doc-card"
+                onClick={() => {
+                  const full = getDoc(d.id)
+                  if (full) navigate(routeFor(full))
+                }}
+              >
                 <div>
                   <div className="title">{d.title || 'Untitled document'}</div>
                   <div className="meta">
-                    {DIALECT_LABELS[d.dialect]} · {d.words.toLocaleString()} words ·{' '}
+                    {d.kind === 'sheet' ? 'Spreadsheet' : DIALECT_LABELS[d.dialect]} ·{' '}
+                    {d.words.toLocaleString()} {d.kind === 'sheet' ? 'cells' : 'words'} ·{' '}
                     {new Date(d.updatedAt).toLocaleDateString()}
                   </div>
                 </div>

@@ -1,11 +1,14 @@
 import type { Dialect } from '../engine/types'
 
+export type DocKind = 'text' | 'sheet'
+
 export interface DocMeta {
   id: string
   title: string
   dialect: Dialect
   updatedAt: number
   words: number
+  kind: DocKind
 }
 
 export interface StoredDoc extends DocMeta {
@@ -19,7 +22,9 @@ type Table = Record<string, StoredDoc>
 
 function load(): Table {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '{}') as Table
+    const table = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Table
+    for (const doc of Object.values(table)) doc.kind ??= 'text'
+    return table
   } catch {
     return {}
   }
@@ -39,7 +44,9 @@ export function getDoc(id: string): StoredDoc | null {
   return load()[id] ?? null
 }
 
-export function createDoc(partial?: Partial<Pick<StoredDoc, 'title' | 'dialect' | 'content'>>): StoredDoc {
+export function createDoc(
+  partial?: Partial<Pick<StoredDoc, 'title' | 'dialect' | 'content' | 'kind'>>,
+): StoredDoc {
   const doc: StoredDoc = {
     id: crypto.randomUUID(),
     title: partial?.title ?? 'Untitled document',
@@ -47,6 +54,7 @@ export function createDoc(partial?: Partial<Pick<StoredDoc, 'title' | 'dialect' 
     content: partial?.content ?? { type: 'doc', content: [{ type: 'paragraph' }] },
     updatedAt: Date.now(),
     words: 0,
+    kind: partial?.kind ?? 'text',
   }
   const table = load()
   table[doc.id] = doc

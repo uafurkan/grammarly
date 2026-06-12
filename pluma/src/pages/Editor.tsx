@@ -188,6 +188,7 @@ export default function EditorPage() {
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
+        <button className="btn" onClick={() => window.print()}>Export PDF</button>
         <button className="btn" onClick={onExport}>Export .docx</button>
       </div>
 
