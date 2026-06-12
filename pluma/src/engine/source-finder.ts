@@ -1,7 +1,8 @@
-// Finds real academic sources for a passage using free, CORS-enabled scholarly
-// APIs (OpenAlex + Crossref) — no API key, no server. Results are scored
-// against the passage with the same keyword-overlap (Jaccard) the originality
-// check uses, so the "match %" is honest, not invented.
+// Finds real sources for a passage using free, CORS-enabled scholarly APIs
+// (OpenAlex + Crossref) — no API key, no server — plus Google Programmable
+// Search when the user connects their own key. Results are scored against the
+// passage with the same keyword-overlap (Jaccard) the originality check uses,
+// so the "match %" is honest, not invented.
 
 import { contentWordSet, jaccard } from './originality'
 
@@ -13,7 +14,49 @@ export interface FoundSource {
   url: string
   abstract: string
   similarity: number // 0..1
-  via: 'OpenAlex' | 'Crossref'
+  via: 'OpenAlex' | 'Crossref' | 'Google'
+}
+
+// --- optional Google Custom Search (needs the user's own API key + cx) ------
+
+const GOOGLE_KEY_STORAGE = 'pluma.google-cse.v1'
+
+export interface GoogleCseConfig {
+  key: string
+  cx: string
+}
+
+export function getGoogleConfig(): GoogleCseConfig | null {
+  try {
+    const raw = localStorage.getItem(GOOGLE_KEY_STORAGE)
+    if (!raw) return null
+    const cfg = JSON.parse(raw) as GoogleCseConfig
+    return cfg.key && cfg.cx ? cfg : null
+  } catch {
+    return null
+  }
+}
+
+export function setGoogleConfig(cfg: GoogleCseConfig | null) {
+  if (!cfg || !cfg.key || !cfg.cx) localStorage.removeItem(GOOGLE_KEY_STORAGE)
+  else localStorage.setItem(GOOGLE_KEY_STORAGE, JSON.stringify(cfg))
+}
+
+async function searchGoogle(query: string, cfg: GoogleCseConfig, signal: AbortSignal): Promise<FoundSource[]> {
+  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(cfg.key)}&cx=${encodeURIComponent(cfg.cx)}&q=${encodeURIComponent(query)}&num=8`
+  const res = await fetch(url, { signal })
+  if (!res.ok) return []
+  const data = (await res.json()) as { items?: { title?: string; link?: string; snippet?: string }[] }
+  return (data.items ?? []).map((it, i) => ({
+    id: it.link ?? `g${i}`,
+    title: it.title ?? 'Untitled',
+    authors: '',
+    year: null,
+    url: it.link ?? '',
+    abstract: it.snippet ?? '',
+    similarity: 0,
+    via: 'Google' as const,
+  }))
 }
 
 const STOP = new Set([
@@ -100,10 +143,13 @@ export async function findSources(
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   let results: FoundSource[] = []
   try {
-    const settled = await Promise.allSettled([
+    const google = getGoogleConfig()
+    const searches: Promise<FoundSource[]>[] = [
       searchOpenAlex(query, controller.signal),
       searchCrossref(query, controller.signal),
-    ])
+    ]
+    if (google) searches.push(searchGoogle(query, google, controller.signal))
+    const settled = await Promise.allSettled(searches)
     results = settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []))
   } finally {
     clearTimeout(timer)

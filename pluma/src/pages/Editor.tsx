@@ -13,7 +13,12 @@ import {
   type OverlapMatch,
   type Source,
 } from '../engine/originality'
-import { findSources, type FoundSource } from '../engine/source-finder'
+import {
+  findSources,
+  getGoogleConfig,
+  setGoogleConfig,
+  type FoundSource,
+} from '../engine/source-finder'
 import { getDoc, updateDoc } from '../store/documents'
 import { exportDocx } from '../files/docx-export'
 import SuggestionCard from '../components/SuggestionCard'
@@ -432,6 +437,10 @@ function OriginalityPanel({
   const [found, setFound] = useState<FoundSource[] | null>(null)
   const [findError, setFindError] = useState<string | null>(null)
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set())
+  const [googleOn, setGoogleOn] = useState(() => getGoogleConfig() !== null)
+  const [googleSetup, setGoogleSetup] = useState(false)
+  const [googleKey, setGoogleKey] = useState('')
+  const [googleCx, setGoogleCx] = useState('')
 
   const runFind = async () => {
     setFinding(true)
@@ -516,8 +525,55 @@ function OriginalityPanel({
         </button>
         <p className="find-note">
           No source of your own? Pluma searches real academic databases
-          (OpenAlex, Crossref) and suggests papers that match your writing.
+          (OpenAlex, Crossref{googleOn ? ' + Google' : ''}) and suggests papers that match your writing.
         </p>
+
+        {googleSetup ? (
+          <div className="src-add">
+            <input
+              placeholder="Google API key"
+              value={googleKey}
+              onChange={(e) => setGoogleKey(e.target.value)}
+            />
+            <input
+              placeholder="Search engine ID (cx)"
+              value={googleCx}
+              onChange={(e) => setGoogleCx(e.target.value)}
+            />
+            <p className="find-note">
+              Needs a free key from Google&apos;s Programmable Search Engine.
+              Stored only in this browser.
+            </p>
+            <div className="row">
+              <button
+                className="btn btn--primary"
+                disabled={!googleKey.trim() || !googleCx.trim()}
+                onClick={() => {
+                  setGoogleConfig({ key: googleKey.trim(), cx: googleCx.trim() })
+                  setGoogleOn(true)
+                  setGoogleSetup(false)
+                }}
+              >
+                Save
+              </button>
+              <button className="btn btn--quiet" onClick={() => setGoogleSetup(false)}>Cancel</button>
+            </div>
+          </div>
+        ) : googleOn ? (
+          <button
+            className="btn btn--quiet"
+            onClick={() => {
+              setGoogleConfig(null)
+              setGoogleOn(false)
+            }}
+          >
+            Google Search connected · Disconnect
+          </button>
+        ) : (
+          <button className="btn btn--quiet" onClick={() => setGoogleSetup(true)}>
+            + Also search Google (optional)
+          </button>
+        )}
 
         {findError && <div className="find-msg">{findError}</div>}
 
