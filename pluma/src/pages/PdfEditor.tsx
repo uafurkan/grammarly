@@ -7,9 +7,11 @@ import { createDoc, getDoc, updateDoc } from '../store/documents'
 import { getBlob } from '../store/blobs'
 import { loadPdf, renderPage, type RenderedPage } from '../files/pdf-render'
 import { exportCorrectedPdf, type Correction } from '../files/pdf-export'
+import { needsOcr, ocrPage, releaseOcr } from '../files/pdf-ocr'
 import SuggestionCard from '../components/SuggestionCard'
 
 const MAX_PAGES = 60
+const MAX_OCR_PAGES = 15
 const SCALE = 1.4
 
 interface PdfAlert {
@@ -42,6 +44,7 @@ export default function PdfEditor() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [truncated, setTruncated] = useState(false)
+  const [ocrStatus, setOcrStatus] = useState<string | null>(null)
 
   const bytesRef = useRef<ArrayBuffer | null>(null)
   const pagesRef = useRef<RenderedPage[]>([])
@@ -70,6 +73,25 @@ export default function PdfEditor() {
         pagesRef.current = rendered
         setPages(rendered)
         setStatus('ready')
+
+        // scanned pages (no text layer) → OCR them so checking + fixing work
+        const scanned = rendered.filter(needsOcr).slice(0, MAX_OCR_PAGES)
+        if (scanned.length > 0) {
+          let done = 0
+          for (const page of scanned) {
+            if (cancelled) break
+            setOcrStatus(`Reading scanned page ${page.pageIndex + 1}… (${++done}/${scanned.length})`)
+            try {
+              await ocrPage(page, dialect, SCALE)
+            } catch {
+              // OCR engine failed to load (offline?) — leave the page as image-only
+            }
+          }
+          void releaseOcr()
+          if (cancelled) return
+          setOcrStatus(null)
+          setPages([...rendered])
+        }
         void runCheck(rendered, dialect)
       } catch (e) {
         if (cancelled) return
@@ -225,6 +247,7 @@ export default function PdfEditor() {
       <div className="editor-body">
         <div className="pdf-scroll">
           {status === 'loading' && <div className="empty" style={{ margin: 40 }}>Rendering the PDF…</div>}
+          {ocrStatus && <div className="ocr-banner">⟳ {ocrStatus} — scanned pages are being made checkable.</div>}
           {pages.map((page) => (
             <PageView
               key={page.pageIndex}

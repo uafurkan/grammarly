@@ -273,6 +273,26 @@ select.dialect {
   padding-left: 1em;
   color: var(--muted);
 }
+.ProseMirror h4 { font-size: 16px; margin: 1em 0 0.5em; }
+.ProseMirror h5 { font-size: 15px; margin: 1em 0 0.5em; }
+.ProseMirror h6 { font-size: 14px; margin: 1em 0 0.5em; }
+.ProseMirror table {
+  border-collapse: collapse;
+  margin: 0 0 0.9em;
+  width: 100%;
+  table-layout: auto;
+  font-size: 0.95em;
+}
+.ProseMirror td, .ProseMirror th {
+  border: 1px solid var(--rule);
+  padding: 6px 10px;
+  vertical-align: top;
+}
+.ProseMirror th { background: var(--bg); font-weight: 600; }
+.ProseMirror td > p:last-child, .ProseMirror th > p:last-child { margin-bottom: 0; }
+.ProseMirror img { max-width: 100%; height: auto; }
+.ProseMirror a { color: var(--accent); }
+.ProseMirror mark { padding: 0 1px; border-radius: 2px; }
 .ProseMirror p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   color: var(--faint);
@@ -381,6 +401,21 @@ select.dialect {
   resize: vertical;
 }
 .src-add input:focus, .src-add textarea:focus { outline: none; border-color: var(--accent); }
+
+/* ---------- pdf ocr ---------- */
+.ocr-banner {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  margin: 8px auto;
+  width: fit-content;
+  background: var(--ink);
+  color: #fff;
+  font-size: 12.5px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,.18);
+}
 
 /* ---------- writing analytics ---------- */
 .analytics-block {
