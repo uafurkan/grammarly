@@ -1,13 +1,15 @@
-import { importDocx, ImportError } from './docx-import'
-import { importPdf } from './pdf-import'
+import { importDocx, ImportError, MAX_FILE_BYTES, sizeError } from './docx-import'
 import { importXlsx } from './xlsx-import'
 import { guessDialect } from '../engine/dialect'
 import { createDoc, type StoredDoc } from '../store/documents'
+import { putBlob } from '../store/blobs'
 
 export const ACCEPTED = '.doc,.docx,.pdf,.xlsx,.xls,.csv,.txt,.rtf,.odt'
 
 export function routeFor(doc: StoredDoc): string {
-  return doc.kind === 'sheet' ? `/sheet/${doc.id}` : `/doc/${doc.id}`
+  if (doc.kind === 'sheet') return `/sheet/${doc.id}`
+  if (doc.kind === 'pdf') return `/pdf/${doc.id}`
+  return `/doc/${doc.id}`
 }
 
 type Kind = 'pdf' | 'sheet' | 'word'
@@ -51,12 +53,13 @@ async function importFile(file: File): Promise<StoredDoc> {
   const kind = detectKind(file)
 
   if (kind === 'pdf') {
-    const { title, html } = await importPdf(file)
-    return createDoc({
-      title,
-      content: html,
-      dialect: guessDialect(html.replace(/<[^>]+>/g, ' ')),
-    })
+    // Keep the original PDF bytes (IndexedDB) so the page is shown pixel-faithful
+    // and exported without re-layout. Text extraction happens in the PDF editor.
+    if (file.size > MAX_FILE_BYTES) throw new ImportError(sizeError(file))
+    const bytes = await file.arrayBuffer()
+    const doc = createDoc({ title: file.name.replace(/\.pdf$/i, ''), kind: 'pdf', content: {} })
+    await putBlob(doc.id, bytes)
+    return doc
   }
 
   if (kind === 'sheet') {

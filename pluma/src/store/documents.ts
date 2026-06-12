@@ -1,7 +1,7 @@
 import type { Dialect } from '../engine/types'
 import type { Source } from '../engine/originality'
 
-export type DocKind = 'text' | 'sheet'
+export type DocKind = 'text' | 'sheet' | 'pdf'
 
 export interface DocMeta {
   id: string

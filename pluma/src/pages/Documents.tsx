@@ -4,6 +4,7 @@ import { createDoc, getDoc, listDocs, removeDoc, type DocMeta } from '../store/d
 import { DIALECT_LABELS } from '../engine/types'
 import { pickAndImport, routeFor } from '../files/upload'
 import { newSheetContent } from '../files/xlsx-import'
+import { deleteBlob } from '../store/blobs'
 
 export default function Documents() {
   const navigate = useNavigate()
@@ -30,6 +31,7 @@ export default function Documents() {
 
   const del = (id: string) => {
     removeDoc(id)
+    void deleteBlob(id)
     setDocs(listDocs())
   }
 
@@ -67,8 +69,8 @@ export default function Documents() {
                 <div>
                   <div className="title">{d.title || 'Untitled document'}</div>
                   <div className="meta">
-                    {d.kind === 'sheet' ? 'Spreadsheet' : DIALECT_LABELS[d.dialect]} ·{' '}
-                    {d.words.toLocaleString()} {d.kind === 'sheet' ? 'cells' : 'words'} ·{' '}
+                    {d.kind === 'sheet' ? 'Spreadsheet' : d.kind === 'pdf' ? 'PDF' : DIALECT_LABELS[d.dialect]}
+                    {d.kind === 'pdf' ? '' : ` · ${d.words.toLocaleString()} ${d.kind === 'sheet' ? 'cells' : 'words'}`} ·{' '}
                     {new Date(d.updatedAt).toLocaleDateString()}
                   </div>
                 </div>

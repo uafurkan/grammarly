@@ -28,10 +28,16 @@ is weakest; the full competitive/technical analysis lives in
 - **Dialect-aware**: en-US ↔ en-GB spelling, Spanish missing accents,
   inverted ¿/¡, «por qué» in questions, and peninsular-vs-LatAm usage
   (vosotros/ustedes, voseo) — switchable per document.
-- **Word, PDF and Excel**: open `.docx`, `.pdf` (text extracted into editable
-  paragraphs) and `.xlsx`/`.xls`/`.csv` (editable grid with cell-level
-  checking); limits **400,000 characters / 25 MB** — 4× Grammarly's 100k/4 MB.
-  Export to `.docx`, `.xlsx`, or PDF (print).
+- **Word, PDF and Excel**, up to **100 MB**: open `.docx`, `.xlsx`/`.xls`/`.csv`
+  (editable grid with cell-level checking), and `.pdf` in a **pixel-faithful
+  editor** — the page is rendered exactly as the original, errors are underlined
+  in place, and accepted fixes are written back with `pdf-lib` (white-out +
+  same-position word) so **download preserves the original appearance**. A
+  "Convert to text" option extracts the writing into a normal document. Large
+  originals are kept in IndexedDB. Export to `.docx`, `.xlsx`, or corrected PDF.
+- **Find sources**: in the Originality panel, search real academic databases
+  (OpenAlex + Crossref, free, no key) for papers matching your draft, ranked by
+  honest keyword overlap, and add any as a source to compare against.
 - **Originality self-check**: add the sources you used and Pluma highlights
   where your draft overlaps them — both **verbatim** and **paraphrased**
   (word-shingles + sentence-level similarity) — then offers to quote or cite
