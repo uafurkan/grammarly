@@ -43,6 +43,7 @@ export default function SheetEditor() {
   const [alerts, setAlerts] = useState<SheetAlert[]>([])
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [panelOpen, setPanelOpen] = useState(false)
 
   const dismissedRef = useRef<Set<string>>(new Set())
   const checkTimer = useRef<number | undefined>(undefined)
@@ -204,6 +205,12 @@ export default function SheetEditor() {
         <button className="btn" onClick={() => exportXlsx(contentRef.current, titleRef.current)}>
           Export .xlsx
         </button>
+        <button
+          className="btn btn--primary mobile-only panel-toggle"
+          onClick={() => setPanelOpen((v) => !v)}
+        >
+          {alerts.length > 0 ? `Review (${alerts.length})` : 'Review'}
+        </button>
       </div>
 
       <div className="sheet-tabs">
@@ -281,7 +288,10 @@ export default function SheetEditor() {
           )}
         </div>
 
-        <aside className="panel">
+        {panelOpen && <div className="panel-backdrop mobile-only" onClick={() => setPanelOpen(false)} />}
+
+        <aside className={`panel${panelOpen ? ' open' : ''}`}>
+          <button className="panel-close mobile-only" onClick={() => setPanelOpen(false)} aria-label="Close">×</button>
           <h2>Suggestions</h2>
           <p className="sub">{alerts.length} across the workbook</p>
           {alerts.length === 0 ? (

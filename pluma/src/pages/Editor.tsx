@@ -31,6 +31,7 @@ export default function EditorPage() {
   const [sources, setSources] = useState<Source[]>(stored.current?.sources ?? [])
   const [overlaps, setOverlaps] = useState<OverlapMatch[]>([])
   const [activeOverlap, setActiveOverlap] = useState<string | null>(null)
+  const [panelOpen, setPanelOpen] = useState(false)
 
   const editorRef = useRef<TTEditor | null>(null)
   const dialectRef = useRef(dialect)
@@ -140,10 +141,15 @@ export default function EditorPage() {
 
   const editor = useEditor({
     extensions: buildExtensions(
-      (alertId) => setActive(alertId),
+      (alertId) => {
+        setActive(alertId)
+        setPanel('grammar')
+        setPanelOpen(true)
+      },
       (overlapId) => {
         setPanel('originality')
         setActiveOverlapHl(overlapId)
+        setPanelOpen(true)
       },
     ),
     content: (stored.current?.content as never) ?? '',
@@ -285,6 +291,12 @@ export default function EditorPage() {
         </select>
         <button className="btn" onClick={() => window.print()}>Export PDF</button>
         <button className="btn" onClick={onExport}>Export .docx</button>
+        <button
+          className="btn btn--primary mobile-only panel-toggle"
+          onClick={() => setPanelOpen((v) => !v)}
+        >
+          {alerts.length > 0 ? `Review (${alerts.length})` : 'Review'}
+        </button>
       </div>
 
       <Toolbar editor={editor} counts={counts} />
@@ -296,7 +308,10 @@ export default function EditorPage() {
           </div>
         </div>
 
-        <aside className="panel">
+        {panelOpen && <div className="panel-backdrop mobile-only" onClick={() => setPanelOpen(false)} />}
+
+        <aside className={`panel${panelOpen ? ' open' : ''}`}>
+          <button className="panel-close mobile-only" onClick={() => setPanelOpen(false)} aria-label="Close">×</button>
           <div className="panel-tabs">
             <button className={panel === 'grammar' ? 'on' : ''} onClick={() => setPanel('grammar')}>
               Suggestions{alerts.length > 0 ? ` (${alerts.length})` : ''}

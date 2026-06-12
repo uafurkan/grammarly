@@ -305,7 +305,20 @@ select.dialect {
   overflow-y: auto;
   padding: 18px;
 }
-@media (max-width: 980px) { .panel { display: none; } }
+
+/* Mobile-only chrome: hidden on desktop, shown inside the mobile breakpoint. */
+.mobile-only { display: none; }
+.panel-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  border: none;
+  background: transparent;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
 
 .panel h2 { font-size: 15px; margin: 0 0 4px; }
 .panel .sub { color: var(--faint); font-size: 12.5px; margin: 0 0 16px; }
@@ -520,4 +533,104 @@ table.sheet td input {
   border-radius: 8px;
   box-shadow: var(--shadow);
   z-index: 50;
+}
+
+/* ===================================================================
+   Mobile — applies only at <= 760px. Desktop layout above is untouched.
+   =================================================================== */
+@media (max-width: 760px) {
+  body { font-size: 15px; }
+
+  .mobile-only { display: inline-flex; }
+
+  /* --- top bars: allow wrapping, tighten padding, scroll long tool rows --- */
+  .topbar { padding: 12px 16px; }
+
+  .editor-top {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    padding: 10px 14px;
+  }
+  .editor-top input.title {
+    order: -1;
+    flex-basis: 100%;
+    font-size: 16px; /* >=16px avoids iOS zoom-on-focus */
+  }
+  .editor-top .btn { padding: 8px 12px; font-size: 13px; }
+  .panel-toggle { margin-left: auto; }
+
+  /* horizontal-scroll the formatting toolbar instead of wrapping it */
+  .toolbar,
+  .sheet-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .toolbar::-webkit-scrollbar,
+  .sheet-tabs::-webkit-scrollbar { display: none; }
+  .toolbar button { flex: 0 0 auto; }
+  .toolbar .count { display: none; }
+
+  /* --- editor surface --- */
+  .editor-scroll { padding: 16px 12px 96px; }
+  .paper {
+    padding: 28px 20px;
+    min-height: auto;
+    box-shadow: var(--shadow);
+  }
+  .ProseMirror { font-size: 16px; }
+
+  /* --- panel becomes a bottom sheet --- */
+  .panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: auto;
+    max-height: 80vh;
+    border-left: none;
+    border-top: 1px solid var(--rule);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -8px 30px rgba(38, 36, 31, 0.18);
+    transform: translateY(102%);
+    transition: transform 220ms ease;
+    z-index: 45;
+    padding-top: 30px;
+  }
+  .panel.open { transform: translateY(0); }
+  .panel-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(38, 36, 31, 0.32);
+    z-index: 44;
+  }
+
+  /* --- home --- */
+  .home main { padding: 40px 20px; }
+  .home h1 { font-size: 32px; }
+  .home .tagline { font-size: 15.5px; margin-bottom: 28px; }
+  .home .actions { flex-direction: column; width: 100%; max-width: 320px; }
+  .home .actions .btn { width: 100%; justify-content: center; }
+  .home .notes { flex-direction: column; gap: 22px; }
+  .home .notes div { max-width: none; }
+
+  /* --- documents list --- */
+  .docs { padding: 24px 16px 64px; }
+  .docs .head { flex-direction: column; gap: 14px; align-items: stretch; }
+  .docs .head .row { flex-wrap: wrap; }
+  .docs .head .row .btn { flex: 1; justify-content: center; }
+
+  /* --- spreadsheet: let it scroll, shrink cells a touch --- */
+  table.sheet th,
+  table.sheet td { min-width: 92px; max-width: 92px; font-size: 12.5px; }
+
+  .notice { left: 16px; right: 16px; transform: none; text-align: center; }
+}
+
+/* Small phones */
+@media (max-width: 380px) {
+  .home h1 { font-size: 27px; }
+  .editor-top .btn { padding: 7px 10px; }
 }
