@@ -351,6 +351,135 @@ const runOn = regexRule(
 )
 void runOn
 
+// ---------------------------------------------------------------------------
+// Clarity — passive voice
+// ---------------------------------------------------------------------------
+
+const PASSIVE_PARTICIPLES = [
+  'written', 'known', 'seen', 'done', 'gone', 'given', 'taken', 'shown',
+  'made', 'said', 'thought', 'brought', 'taught', 'bought', 'caught',
+  'felt', 'held', 'kept', 'left', 'lost', 'sent', 'told', 'found', 'led',
+  'heard', 'built', 'broken', 'chosen', 'driven', 'eaten', 'fallen', 'frozen',
+  'hidden', 'risen', 'stolen', 'thrown', 'torn', 'worn', 'beaten',
+]
+const STATIVE_ADJ = new Set([
+  'tired', 'excited', 'interested', 'married', 'located', 'based', 'named',
+  'called', 'known', 'supposed', 'dedicated', 'involved', 'related', 'concerned',
+])
+const PASSIVE_PART_PAT = `(?:${PASSIVE_PARTICIPLES.join('|')}|[a-z]{4,}ed)`
+const passiveVoice = regexRule(
+  'en.passive-voice',
+  ALL_EN,
+  new RegExp(`\\b(am|is|are|was|were|be|been|being)\\s+(?:[a-z]+ly\\s+)?(${PASSIVE_PART_PAT})\\b`, 'gi'),
+  (m) => {
+    if (STATIVE_ADJ.has(m[2].toLowerCase())) return null
+    return {
+      replacements: [],
+      category: 'clarity',
+      message: 'Passive voice — rewrite in active voice for stronger sentences.',
+    }
+  },
+)
+
+// ---------------------------------------------------------------------------
+// Clarity — weak intensifiers
+// ---------------------------------------------------------------------------
+
+const weakIntensifier = regexRule(
+  'en.weak-intensifier',
+  ALL_EN,
+  /\b(very|really|extremely|incredibly|absolutely|totally|literally|basically|simply|quite|rather|awfully|terribly)\s+(\w+)/gi,
+  (m) => ({
+    replacements: [m[2]],
+    category: 'clarity',
+    message: `"${m[1]}" is a filler. Drop it or choose a stronger word.`,
+  }),
+)
+
+// ---------------------------------------------------------------------------
+// Clarity — wordy phrases
+// ---------------------------------------------------------------------------
+
+const WORDY: [RegExp, string, string][] = [
+  [/\bin order to\b/gi, 'to', '"in order to" → "to"'],
+  [/\bdue to the fact that\b/gi, 'because', '"due to the fact that" → "because"'],
+  [/\bat this point in time\b/gi, 'now', '"at this point in time" → "now"'],
+  [/\bin the event that\b/gi, 'if', '"in the event that" → "if"'],
+  [/\bfor the purpose of\b/gi, 'to', '"for the purpose of" → "to"'],
+  [/\bin spite of the fact that\b/gi, 'although', '"in spite of the fact that" → "although"'],
+  [/\bin the near future\b/gi, 'soon', '"in the near future" → "soon"'],
+  [/\bon a regular basis\b/gi, 'regularly', '"on a regular basis" → "regularly"'],
+  [/\bin a timely manner\b/gi, 'promptly', '"in a timely manner" → "promptly"'],
+  [/\bat (the present|this) time\b/gi, 'currently', '→ "currently"'],
+  [/\ba large number of\b/gi, 'many', '"a large number of" → "many"'],
+  [/\bthe majority of\b/gi, 'most', '"the majority of" → "most"'],
+  [/\bin close proximity( to)?\b/gi, 'near', '"in close proximity to" → "near"'],
+  [/\bprior to\b/gi, 'before', '"prior to" → "before"'],
+  [/\bsubsequent to\b/gi, 'after', '"subsequent to" → "after"'],
+  [/\bin light of the fact that\b/gi, 'since', '→ "since"'],
+  [/\bis able to\b/gi, 'can', '"is able to" → "can"'],
+  [/\bare able to\b/gi, 'can', '"are able to" → "can"'],
+  [/\bmake a decision\b/gi, 'decide', '"make a decision" → "decide"'],
+  [/\bmake a choice\b/gi, 'choose', '"make a choice" → "choose"'],
+  [/\btake into consideration\b/gi, 'consider', '→ "consider"'],
+  [/\bprovide assistance\b/gi, 'help', '"provide assistance" → "help"'],
+  [/\bmake an attempt\b/gi, 'try', '"make an attempt" → "try"'],
+  [/\b(utilise|utilize)\b/gi, 'use', '"utilize" → "use"'],
+  [/\b(endeavour|endeavor)\b/gi, 'try', '"endeavor" → "try"'],
+  [/\bcommence\b/gi, 'start', '"commence" → "start"'],
+  [/\bfacilitate\b/gi, 'help or enable', '"facilitate" → "help"'],
+  [/\bascertain\b/gi, 'find out', '"ascertain" → "find out"'],
+]
+
+const wordyRules: Rule[] = WORDY.map(([re, fix, msg], i) =>
+  regexRule(`en.wordy-${i}`, ALL_EN, re, () => ({
+    replacements: [fix],
+    category: 'clarity',
+    message: `Wordy phrase — ${msg}.`,
+  })),
+)
+
+// ---------------------------------------------------------------------------
+// Clarity — hedging phrases
+// ---------------------------------------------------------------------------
+
+const hedging = regexRule(
+  'en.hedging',
+  ALL_EN,
+  /\b(i think that |i believe that |i feel that |in my opinion[,]? |sort of |kind of )/gi,
+  () => ({
+    replacements: [],
+    category: 'clarity',
+    message: 'Hedging phrase weakens your point. State it directly.',
+  }),
+)
+
+// ---------------------------------------------------------------------------
+// Clarity — sentences over 45 words
+// ---------------------------------------------------------------------------
+
+const longSentence: Rule = {
+  id: 'en.long-sentence',
+  dialects: ALL_EN,
+  apply(text) {
+    const out: import('../types').RuleMatch[] = []
+    for (const m of text.matchAll(/[^.!?]+[.!?]/g)) {
+      const words = m[0].trim().split(/\s+/).length
+      if (words > 45) {
+        out.push({
+          begin: m.index!,
+          end: m.index! + m[0].length,
+          text: m[0].trim().slice(0, 60) + '…',
+          replacements: [],
+          category: 'clarity',
+          message: `Long sentence (${words} words). Consider splitting it.`,
+        })
+      }
+    }
+    return out
+  },
+}
+
 export const EN_RULES: Rule[] = [
   repeatedWord,
   doubleSpace,
@@ -373,6 +502,11 @@ export const EN_RULES: Rule[] = [
   contraction,
   yourWelcome,
   itsIts,
+  passiveVoice,
+  weakIntensifier,
+  ...wordyRules,
+  hedging,
+  longSentence,
   dialectSpelling('en.us-spelling', 'en-US', UK_TO_US, 'British'),
   dialectSpelling('en.uk-spelling', 'en-GB', US_TO_UK, 'American'),
 ]

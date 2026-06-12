@@ -66,6 +66,61 @@ export const setGoogleConfig = (cfg: { key: string; cx: string } | null) =>
   setWebConfig('google', cfg)
 
 // ---------------------------------------------------------------------------
+// Quota tracking (shared pool across all 3 web engines)
+// ---------------------------------------------------------------------------
+
+// Free-tier limits per engine
+const ENGINE_LIMITS: Record<WebEngineId, { limit: number; reset: 'daily' | 'monthly' | 'lifetime' }> = {
+  google: { limit: 100,  reset: 'daily'    },
+  brave:  { limit: 2000, reset: 'monthly'  },
+  serper: { limit: 2500, reset: 'lifetime' },
+  bing:   { limit: 1000, reset: 'monthly'  },
+}
+
+interface QuotaRecord { count: number; period: string }
+
+function quotaPeriod(reset: 'daily' | 'monthly' | 'lifetime'): string {
+  if (reset === 'lifetime') return 'lifetime'
+  const d = new Date()
+  return reset === 'daily' ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 7)
+}
+
+export function getQuota(engine: WebEngineId): { used: number; limit: number; remaining: number } {
+  const { limit, reset } = ENGINE_LIMITS[engine]
+  const period = quotaPeriod(reset)
+  try {
+    const raw = localStorage.getItem(`pluma.quota.${engine}.v1`)
+    if (!raw) return { used: 0, limit, remaining: limit }
+    const rec = JSON.parse(raw) as QuotaRecord
+    if (rec.period !== period) return { used: 0, limit, remaining: limit }
+    return { used: rec.count, limit, remaining: Math.max(0, limit - rec.count) }
+  } catch {
+    return { used: 0, limit, remaining: limit }
+  }
+}
+
+function consumeQuota(engine: WebEngineId) {
+  const { reset } = ENGINE_LIMITS[engine]
+  const period = quotaPeriod(reset)
+  const key = `pluma.quota.${engine}.v1`
+  try {
+    const raw = localStorage.getItem(key)
+    let rec: QuotaRecord = { count: 1, period }
+    if (raw) {
+      const parsed = JSON.parse(raw) as QuotaRecord
+      rec = parsed.period === period ? { count: parsed.count + 1, period } : { count: 1, period }
+    }
+    localStorage.setItem(key, JSON.stringify(rec))
+  } catch {}
+}
+
+async function withQuota<T>(engine: WebEngineId, fn: () => Promise<T>): Promise<T | null> {
+  if (getQuota(engine).remaining <= 0) return null
+  consumeQuota(engine)
+  return fn()
+}
+
+// ---------------------------------------------------------------------------
 // Free academic searches (no key needed)
 // ---------------------------------------------------------------------------
 
@@ -337,10 +392,10 @@ export async function findSources(
     const brave = getWebConfig('brave')
     const serper = getWebConfig('serper')
     const bing = getWebConfig('bing')
-    if (google) searches.push(searchGoogle(query, google, controller.signal))
-    if (brave) searches.push(searchBrave(query, brave, controller.signal))
-    if (serper) searches.push(searchSerper(query, serper, controller.signal))
-    if (bing) searches.push(searchBing(query, bing, controller.signal))
+    if (google) searches.push(withQuota('google', () => searchGoogle(query, google, controller.signal)).then(r => r ?? []))
+    if (brave)  searches.push(withQuota('brave',  () => searchBrave(query,  brave,  controller.signal)).then(r => r ?? []))
+    if (serper) searches.push(withQuota('serper', () => searchSerper(query, serper, controller.signal)).then(r => r ?? []))
+    if (bing)   searches.push(withQuota('bing',   () => searchBing(query,   bing,   controller.signal)).then(r => r ?? []))
 
     const settled = await Promise.allSettled(searches)
     results = settled.flatMap((s) => (s.status === 'fulfilled' ? s.value : []))

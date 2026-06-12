@@ -17,8 +17,10 @@ import {
   findSources,
   getWebConfig,
   setWebConfig,
+  getQuota,
   type FoundSource,
 } from '../engine/source-finder'
+import { analyzeText, type WritingAnalytics } from '../engine/analytics'
 import { getDoc, updateDoc } from '../store/documents'
 import { exportDocx } from '../files/docx-export'
 import SuggestionCard from '../components/SuggestionCard'
@@ -33,6 +35,7 @@ export default function EditorPage() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [counts, setCounts] = useState({ words: 0, chars: 0 })
+  const [analytics, setAnalytics] = useState<WritingAnalytics | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   const [panel, setPanel] = useState<'grammar' | 'originality'>('grammar')
@@ -86,6 +89,7 @@ export default function EditorPage() {
       words: text.trim() ? text.trim().split(/\s+/).length : 0,
       chars: text.replace(/\n/g, '').length,
     })
+    setAnalytics(text.trim().split(/\s+/).length >= 30 ? analyzeText(text) : null)
     // instant rules-only pass, then the richer worker pass (rules + dictionary)
     renderAlerts(text, check(text, dialectRef.current))
     checkAsync(text, dialectRef.current, personalRef.current).then((alerts) =>
@@ -377,6 +381,53 @@ export default function EditorPage() {
           <p className="sub">
             {correctness} correctness · {alerts.length - correctness} clarity
           </p>
+
+          {analytics && (
+            <div className="analytics-block">
+              <div className="an-row">
+                <span className="an-label">Readability</span>
+                <span className="an-val">
+                  <span className={`an-pill an-ease-${Math.floor(analytics.fleschEase / 20)}`}>
+                    {analytics.readabilityLabel}
+                  </span>
+                  <span className="an-dim">grade {analytics.fleschGrade}</span>
+                </span>
+              </div>
+              <div className="an-row">
+                <span className="an-label">Avg sentence</span>
+                <span className="an-val">{analytics.avgWordsPerSentence} words
+                  {analytics.avgWordsPerSentence > 25
+                    ? <span className="an-warn"> ↑ long</span>
+                    : analytics.avgWordsPerSentence < 12
+                    ? <span className="an-ok"> ↓ short</span>
+                    : null}
+                </span>
+              </div>
+              <div className="an-row">
+                <span className="an-label">Passive voice</span>
+                <span className="an-val">
+                  {analytics.passivePct}% of sentences
+                  {analytics.passivePct > 30 ? <span className="an-warn"> ↑</span> : null}
+                </span>
+              </div>
+              <div className="an-row">
+                <span className="an-label">Vocabulary</span>
+                <span className="an-val">
+                  {Math.round(analytics.vocabularyRichness * 100)}% unique words
+                  {analytics.intensifierCount > 0
+                    ? <span className="an-dim"> · {analytics.intensifierCount} filler{analytics.intensifierCount > 1 ? 's' : ''}</span>
+                    : null}
+                </span>
+              </div>
+              <div className="an-row">
+                <span className="an-label">Style</span>
+                <span className="an-val">{analytics.styleLabel}
+                  <span className="an-dim"> · {analytics.readingMinutes < 1 ? '< 1' : analytics.readingMinutes} min read</span>
+                </span>
+              </div>
+            </div>
+          )}
+
           {alerts.length === 0 ? (
             <div className="clean">
               <span className="mark">✓</span>
@@ -576,16 +627,29 @@ function OriginalityPanel({
                 </div>
               </div>
             ) : webEngines[id] ? (
-              <button
-                key={id}
-                className="btn btn--quiet"
-                onClick={() => {
-                  setWebConfig(id, null)
-                  setWebEngines((prev) => ({ ...prev, [id]: false }))
-                }}
-              >
-                {label} connected · Disconnect
-              </button>
+              (() => {
+                const q = getQuota(id)
+                const pct = Math.round((q.remaining / q.limit) * 100)
+                return (
+                  <div key={id} className="engine-row">
+                    <div className="engine-bar-wrap">
+                      <div className="engine-bar" style={{ width: `${pct}%`, background: pct > 30 ? 'var(--accent)' : '#e57' }} />
+                    </div>
+                    <span className="engine-quota">{q.remaining.toLocaleString()} / {q.limit.toLocaleString()} left</span>
+                    <span className="engine-name">{label}</span>
+                    <button
+                      className="btn btn--quiet btn--danger"
+                      style={{ padding: '2px 8px', fontSize: 11 }}
+                      onClick={() => {
+                        setWebConfig(id, null)
+                        setWebEngines((prev) => ({ ...prev, [id]: false }))
+                      }}
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                )
+              })()
             ) : (
               <button key={id} className="btn btn--quiet" onClick={() => { setWebSetup(id); setWebKey(''); setWebCx('') }}>
                 + {label} Search
