@@ -1,6 +1,9 @@
-import * as pdfjs from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import { ImportError, MAX_CHARS, MAX_FILE_BYTES } from './docx-import'
+// Use the *legacy* build: it self-polyfills Promise.withResolvers and other
+// modern APIs, so PDFs open on older iOS Safari / Chrome too (the cause of
+// "most PDFs fail" reports).
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import { ImportError, MAX_CHARS, MAX_FILE_BYTES, sizeError } from './docx-import'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -20,16 +23,16 @@ const escapeHtml = (s: string) =>
  */
 export async function importPdf(file: File): Promise<ImportedPdf> {
   if (file.size > MAX_FILE_BYTES) {
-    throw new ImportError(
-      `This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB — the limit is 25 MB.`,
-    )
+    throw new ImportError(sizeError(file))
   }
 
   let doc: pdfjs.PDFDocumentProxy
   try {
     doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise
-  } catch {
-    throw new ImportError('Could not read this PDF. Is the file valid and not password-protected?')
+  } catch (err) {
+    throw new ImportError(
+      `Could not read this PDF${err instanceof Error && err.message ? ` (${err.message.slice(0, 80)})` : ''}. It may be password-protected or corrupted.`,
+    )
   }
 
   const blocks: string[] = []

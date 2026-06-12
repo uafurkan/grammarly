@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { ImportError, MAX_FILE_BYTES } from './docx-import'
+import { ImportError, MAX_FILE_BYTES, sizeError } from './docx-import'
 
 export interface SheetData {
   name: string
@@ -16,13 +16,11 @@ export interface ImportedSheet {
   content: SheetContent
 }
 
-const MAX_CELLS = 250_000
+const MAX_CELLS = 1_000_000
 
 export async function importXlsx(file: File): Promise<ImportedSheet> {
   if (file.size > MAX_FILE_BYTES) {
-    throw new ImportError(
-      `This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB — the limit is 25 MB.`,
-    )
+    throw new ImportError(sizeError(file))
   }
 
   let wb: XLSX.WorkBook

@@ -1,9 +1,12 @@
 import mammoth from 'mammoth'
 
 // Grammarly caps uploads at 100,000 characters / 4 MB (see analysis §2).
-// Pluma deliberately goes well past that.
-export const MAX_FILE_BYTES = 25 * 1024 * 1024 // 25 MB
-export const MAX_CHARS = 400_000
+// Pluma deliberately goes far past that.
+export const MAX_FILE_BYTES = 100 * 1024 * 1024 // 100 MB
+export const MAX_CHARS = 2_000_000
+
+export const sizeError = (file: File) =>
+  `This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB — the limit is 100 MB.`
 
 export class ImportError extends Error {}
 
@@ -14,13 +17,8 @@ export interface ImportedDoc {
 }
 
 export async function importDocx(file: File): Promise<ImportedDoc> {
-  if (!/\.docx?$/i.test(file.name)) {
-    throw new ImportError('Only .docx and .doc files are supported for now. PDF and Excel are on the roadmap.')
-  }
   if (file.size > MAX_FILE_BYTES) {
-    throw new ImportError(
-      `This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB — the limit is 25 MB.`,
-    )
+    throw new ImportError(sizeError(file))
   }
 
   const arrayBuffer = await file.arrayBuffer()
@@ -28,8 +26,16 @@ export async function importDocx(file: File): Promise<ImportedDoc> {
   try {
     const result = await mammoth.convertToHtml({ arrayBuffer })
     html = result.value
-  } catch {
-    throw new ImportError('Could not read this file. Is it a valid Word document?')
+  } catch (err) {
+    // Old binary .doc files are not supported by mammoth — say so clearly.
+    if (/\.doc$/i.test(file.name)) {
+      throw new ImportError(
+        'This is an old binary .doc file. Please re-save it as .docx in Word and upload again.',
+      )
+    }
+    throw new ImportError(
+      `Could not read this Word document${err instanceof Error && err.message ? ` (${err.message.slice(0, 80)})` : ''}.`,
+    )
   }
 
   const probe = document.createElement('div')
