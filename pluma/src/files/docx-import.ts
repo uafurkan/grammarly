@@ -1,4 +1,5 @@
 import mammoth from 'mammoth'
+import { docxToFaithfulHtml } from './docx-faithful'
 
 // Grammarly caps uploads at 100,000 characters / 4 MB (see analysis §2).
 // Pluma deliberately goes far past that.
@@ -24,8 +25,21 @@ export async function importDocx(file: File): Promise<ImportedDoc> {
   const arrayBuffer = await file.arrayBuffer()
   let html: string
   try {
-    const result = await mammoth.convertToHtml({ arrayBuffer })
-    html = result.value
+    // faithful OOXML parse first (keeps alignment, colors, sizes, tables,
+    // images, highlights); mammoth is the safety net — and wins if the
+    // faithful parse somehow dropped a meaningful share of the text
+    const mammothHtml = (await mammoth.convertToHtml({ arrayBuffer })).value
+    try {
+      const faithful = await docxToFaithfulHtml(arrayBuffer.slice(0))
+      const textLen = (h: string) => {
+        const d = document.createElement('div')
+        d.innerHTML = h
+        return (d.textContent ?? '').replace(/\s+/g, '').length
+      }
+      html = textLen(faithful) >= textLen(mammothHtml) * 0.7 ? faithful : mammothHtml
+    } catch {
+      html = mammothHtml
+    }
   } catch (err) {
     // Old binary .doc files are not supported by mammoth — say so clearly.
     if (/\.doc$/i.test(file.name)) {
