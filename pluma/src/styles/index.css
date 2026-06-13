@@ -750,32 +750,190 @@ select.dialect {
 }
 
 /* ---------- Word add-in install page ---------- */
-.install { max-width: 720px; }
-.install-cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 10px; }
-.install-fine { color: var(--faint); font-size: 13px; margin: 0 0 28px; }
-.install-fine code { background: var(--accent-soft); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
-.install-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-.install-tab {
-  border: 1px solid var(--rule);
-  background: var(--paper);
-  color: var(--muted);
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 13.5px;
-  cursor: pointer;
+.install-page {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
-.install-tab:hover { color: var(--ink); }
-.install-tab.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
-.install-card {
+.install {
+  flex: 1;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 40px 24px 72px;
+  box-sizing: border-box;
+}
+
+/* hero — the only centered block */
+.install-hero { text-align: center; margin-bottom: 30px; }
+.install-kicker {
+  display: inline-block;
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
+.install-hero h1 {
+  font-family: var(--serif);
+  font-size: 40px;
+  line-height: 1.1;
+  margin: 0 0 14px;
+  font-weight: 600;
+}
+.install-lede {
+  font-size: 17px;
+  color: var(--muted);
+  line-height: 1.55;
+  max-width: 480px;
+  margin: 0 auto 24px;
+}
+.install-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin: 0 0 12px;
+}
+.install-download { box-shadow: 0 6px 18px -8px rgba(47, 93, 58, 0.6); }
+.install-fine { color: var(--faint); font-size: 13px; line-height: 1.5; margin: 0; max-width: 420px; margin-inline: auto; }
+.install-fine code { background: var(--accent-soft); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+
+/* "which Office version?" disclosure */
+.install-version {
   border: 1px solid var(--rule);
   border-radius: 12px;
   background: var(--paper);
-  padding: 22px 26px;
-  margin-bottom: 36px;
+  margin-bottom: 22px;
+  overflow: hidden;
 }
-.install-steps { margin: 0; padding-left: 20px; }
-.install-steps li { margin-bottom: 10px; line-height: 1.5; }
-.install-note { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--rule); }
+.install-version-q {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 15px 18px;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: left;
+}
+.install-chev { color: var(--accent); font-size: 18px; line-height: 1; flex: 0 0 auto; }
+.install-version-a { padding: 0 18px 16px; font-size: 14px; color: var(--muted); line-height: 1.6; }
+.install-version-a p { margin: 0 0 8px; }
+.install-version-a ul { margin: 0; padding-left: 18px; }
+.install-version-a li { margin-bottom: 6px; }
+.install-version-a b { color: var(--ink); }
+
+/* segmented platform tabs */
+.install-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--accent-soft);
+  border-radius: 11px;
+  padding: 4px;
+  margin-bottom: 16px;
+}
+.install-tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.install-tab:hover { color: var(--ink); }
+.install-tab.on { background: var(--paper); color: var(--accent); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+
+/* step card */
+.install-card {
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--paper);
+  padding: 24px 26px 22px;
+  margin-bottom: 40px;
+}
+.install-card-sub {
+  margin: 0 0 18px;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 600;
+}
+.install-steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
+.install-steps li {
+  display: flex;
+  gap: 14px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.install-steps li:last-child { padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
+.install-step-n {
+  flex: 0 0 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.install-step-body { display: flex; flex-direction: column; gap: 3px; }
+.install-step-title { font-size: 15px; color: var(--ink); font-weight: 500; line-height: 1.4; }
+.install-step-detail { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+.install-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 18px 0 0;
+  padding: 14px 16px 0;
+  border-top: 1px solid var(--rule);
+}
+
+/* feature trio */
+.install-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+  border-top: 1px solid var(--rule);
+  padding-top: 30px;
+}
+.install-features h3 { font-size: 15px; margin: 0 0 7px; }
+.install-features p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.55; }
+
+.install-footer {
+  padding: 18px 28px;
+  color: var(--faint);
+  font-size: 12.5px;
+  border-top: 1px solid var(--rule);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .install { padding: 28px 18px 56px; }
+  .install-hero h1 { font-size: 31px; }
+  .install-lede { font-size: 15.5px; }
+  .install-cta { flex-direction: column; }
+  .install-cta .btn { width: 100%; }
+  .install-card { padding: 20px 18px; }
+  .install-features { grid-template-columns: 1fr; gap: 22px; }
+}
 
 /* ---------- citations / bibliography ---------- */
 .cite-styles { display: flex; gap: 4px; }
