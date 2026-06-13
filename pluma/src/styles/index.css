@@ -443,6 +443,8 @@ select.dialect {
   color: var(--muted);
   cursor: pointer;
 }
+/* Drag handle pill for swipe-to-close — hidden on desktop */
+.panel-drag-handle { display: none; }
 
 .panel h2 { font-size: 15px; margin: 0 0 4px; }
 .panel .sub { color: var(--faint); font-size: 12.5px; margin: 0 0 16px; }
@@ -776,6 +778,22 @@ table.sheet td input {
 .pdf-overlap--paraphrase { background: rgba(46, 94, 138, 0.14); }
 .pdf-overlap.active { outline: 1.5px solid var(--accent); }
 
+/* text-reveal layer: makes extracted text visible when pdfjs can't decode the
+   embedded font. mix-blend-mode:multiply means black-on-white = black (text
+   appears), black-on-already-black = black (no visible change on good pages). */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  user-select: none;
+}
+.pdf-text-item {
+  position: absolute;
+  color: #000;
+  white-space: pre;
+}
+
 /* in-place correction: blends with the page (matched font), only a faint
    accent underline hints that the word was changed */
 .pdf-correction {
@@ -872,6 +890,28 @@ table.sheet td input {
   .ProseMirror table { min-width: 0; }
 
   /* --- panel becomes a bottom sheet --- */
+  .panel-drag-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100px;
+    height: 28px;
+    cursor: grab;
+    touch-action: none;
+    z-index: 11;
+  }
+  .panel-drag-handle::before {
+    content: '';
+    display: block;
+    width: 38px;
+    height: 4px;
+    background: rgba(38, 36, 31, 0.22);
+    border-radius: 2px;
+  }
   .panel {
     position: fixed;
     left: 0;

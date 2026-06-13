@@ -55,6 +55,9 @@ export default function EditorPage() {
   const checkTimer = useRef<number | undefined>(undefined)
   const saveTimer = useRef<number | undefined>(undefined)
   const scrollTimer = useRef<number | undefined>(undefined)
+  const asideRef = useRef<HTMLElement | null>(null)
+  const editorDragHandleRef = useRef<HTMLDivElement | null>(null)
+  const editorSwipeStartY = useRef(0)
 
   const renderAlerts = useCallback((sourceText: string, alerts: Alert[]) => {
     const editor = editorRef.current
@@ -279,6 +282,36 @@ export default function EditorPage() {
     return () => window.clearTimeout(t)
   }, [notice])
 
+  // swipe-to-close the panel bottom sheet on mobile
+  useEffect(() => {
+    const handle = editorDragHandleRef.current
+    if (!handle) return
+    const onStart = (e: TouchEvent) => { editorSwipeStartY.current = e.touches[0].clientY }
+    const onMove = (e: TouchEvent) => {
+      const el = asideRef.current
+      if (!el) return
+      e.preventDefault()
+      const dy = e.touches[0].clientY - editorSwipeStartY.current
+      if (dy > 0) { el.style.transition = 'none'; el.style.transform = `translateY(${dy}px)` }
+    }
+    const onEnd = (e: TouchEvent) => {
+      const el = asideRef.current
+      if (!el) return
+      const dy = e.changedTouches[0].clientY - editorSwipeStartY.current
+      el.style.transform = ''
+      el.style.transition = ''
+      if (dy > 80) setPanelOpen(false)
+    }
+    handle.addEventListener('touchstart', onStart, { passive: true })
+    handle.addEventListener('touchmove', onMove, { passive: false })
+    handle.addEventListener('touchend', onEnd, { passive: true })
+    return () => {
+      handle.removeEventListener('touchstart', onStart)
+      handle.removeEventListener('touchmove', onMove)
+      handle.removeEventListener('touchend', onEnd)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const accept = (alert: Alert, index = 0) => {
     const ed = editorRef.current
     const replacement = alert.replacements[index]
@@ -421,7 +454,8 @@ export default function EditorPage() {
 
         {panelOpen && <div className="panel-backdrop mobile-only" onClick={() => setPanelOpen(false)} />}
 
-        <aside className={`panel${panelOpen ? ' open' : ''}`}>
+        <aside ref={asideRef} className={`panel${panelOpen ? ' open' : ''}`}>
+          <div ref={editorDragHandleRef} className="panel-drag-handle mobile-only" />
           <button className="panel-close mobile-only" onClick={() => setPanelOpen(false)} aria-label="Close">×</button>
           <div className="panel-tabs">
             <button className={panel === 'grammar' ? 'on' : ''} onClick={() => setPanel('grammar')}>

@@ -78,6 +78,9 @@ export default function PdfEditor() {
   const bytesRef = useRef<ArrayBuffer | null>(null)
   const pagesRef = useRef<RenderedPage[]>([])
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const panelEl = useRef<HTMLElement | null>(null)
+  const dragHandleRef = useRef<HTMLDivElement | null>(null)
+  const swipeStartY = useRef(0)
   const sourcesRef = useRef(sources)
   sourcesRef.current = sources
   const loadedRef = useRef(false)
@@ -293,6 +296,36 @@ export default function PdfEditor() {
     return () => window.removeEventListener('resize', measure)
   }, [pages])
 
+  // swipe-to-close: non-passive touchmove so we can preventDefault (stops page scroll)
+  useEffect(() => {
+    const handle = dragHandleRef.current
+    if (!handle) return
+    const onStart = (e: TouchEvent) => { swipeStartY.current = e.touches[0].clientY }
+    const onMove = (e: TouchEvent) => {
+      const el = panelEl.current
+      if (!el) return
+      e.preventDefault()
+      const dy = e.touches[0].clientY - swipeStartY.current
+      if (dy > 0) { el.style.transition = 'none'; el.style.transform = `translateY(${dy}px)` }
+    }
+    const onEnd = (e: TouchEvent) => {
+      const el = panelEl.current
+      if (!el) return
+      const dy = e.changedTouches[0].clientY - swipeStartY.current
+      el.style.transform = ''
+      el.style.transition = ''
+      if (dy > 80) setPanelOpen(false)
+    }
+    handle.addEventListener('touchstart', onStart, { passive: true })
+    handle.addEventListener('touchmove', onMove, { passive: false })
+    handle.addEventListener('touchend', onEnd, { passive: true })
+    return () => {
+      handle.removeEventListener('touchstart', onStart)
+      handle.removeEventListener('touchmove', onMove)
+      handle.removeEventListener('touchend', onEnd)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!notice) return
     const t = window.setTimeout(() => setNotice(null), 4000)
@@ -432,7 +465,8 @@ export default function PdfEditor() {
         </div>
 
         {panelOpen && <div className="panel-backdrop mobile-only" onClick={() => setPanelOpen(false)} />}
-        <aside className={`panel${panelOpen ? ' open' : ''}`}>
+        <aside ref={panelEl} className={`panel${panelOpen ? ' open' : ''}`}>
+          <div ref={dragHandleRef} className="panel-drag-handle mobile-only" />
           <button className="panel-close mobile-only" onClick={() => setPanelOpen(false)} aria-label="Close">×</button>
           <div className="panel-tabs">
             <button className={panel === 'grammar' ? 'on' : ''} onClick={() => setPanel('grammar')}>
@@ -531,6 +565,33 @@ function PageView({
         style={{ width: page.width, height: page.height, transform: `scale(${fit})`, transformOrigin: 'top left' }}
       >
         <div ref={holder} className="pdf-canvas-holder" />
+        {/* text-reveal layer: re-draws extracted text so it stays visible even
+            when the PDF uses an embedded font pdfjs can't decode to glyphs.
+            mix-blend-mode:multiply keeps it invisible on correctly-rendered pages
+            (black × canvas-black = black) and reveals it where the canvas is white
+            (black × white = black). */}
+        <div className="pdf-text-layer">
+          {page.items.map((item, i) => {
+            if (appliedFor(page.pageIndex, i)) return null
+            return (
+              <div
+                key={`tl${i}`}
+                className="pdf-text-item"
+                style={{
+                  left: item.left,
+                  top: item.top,
+                  fontSize: item.fontSize,
+                  lineHeight: `${item.height}px`,
+                  fontFamily: FONT_STACK[item.fontClass],
+                  fontWeight: item.bold ? 700 : 400,
+                  fontStyle: item.italic ? 'italic' : 'normal',
+                }}
+              >
+                {item.str}
+              </div>
+            )
+          })}
+        </div>
         {/* originality overlap highlights (drawn under the error underlines) */}
         {overlaps.map((o) => (
           <div
