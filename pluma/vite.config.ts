@@ -54,7 +54,7 @@ export default defineConfig({
         // Office task-pane page (Word must receive office.html, not index.html).
         // No `$` anchor: Office appends a `?_host_Info=...` query to the task-pane
         // URL, so the path no longer *ends* with office.html — match anywhere.
-        navigateFallbackDenylist: [/\/pluma-word\.xml/, /\/office\.html/],
+        navigateFallbackDenylist: [/\/pluma-word\.xml(?:[?#]|$)/, /\/office\.html(?:[?#]|$)/],
         runtimeCaching: [
           {
             // pdf.js worker (.mjs) + Hunspell dictionaries — cache on first use

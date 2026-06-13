@@ -30,6 +30,7 @@ export interface ChatTurn {
 let engine: MLCEngineInterface | null = null
 let loadedModelId: ModelId | null = null
 let loadingPromise: Promise<void> | null = null
+let loadingModelId: ModelId | null = null
 
 export function isModelLoaded(): boolean {
   return engine !== null
@@ -41,8 +42,16 @@ export function currentModel(): ModelId | null {
 
 export async function loadModel(id: ModelId, onProgress: (p: LoadProgress) => void): Promise<void> {
   if (engine && loadedModelId === id) return
-  if (loadingPromise) return loadingPromise
+  // A load is already in flight: reuse it only if it's for the SAME model.
+  // Otherwise wait for it to settle, then load the model that was actually asked
+  // for — returning the in-flight promise blindly would report the wrong model.
+  if (loadingPromise) {
+    if (loadingModelId === id) return loadingPromise
+    try { await loadingPromise } catch { /* fall through and try the requested model */ }
+    if (engine && loadedModelId === id) return
+  }
 
+  loadingModelId = id
   loadingPromise = (async () => {
     const caps = await detectAi()
     if (!caps.webgpu) throw new Error('WebGPU is not available on this device.')
@@ -64,6 +73,7 @@ export async function loadModel(id: ModelId, onProgress: (p: LoadProgress) => vo
     await loadingPromise
   } finally {
     loadingPromise = null
+    loadingModelId = null
   }
 }
 
