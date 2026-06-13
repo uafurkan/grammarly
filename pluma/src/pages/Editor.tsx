@@ -21,7 +21,7 @@ import {
   type FoundSource,
 } from '../engine/source-finder'
 import { analyzeText, type WritingAnalytics } from '../engine/analytics'
-import { getDoc, updateDoc } from '../store/documents'
+import { getDoc, updateDoc, saveEditorState, touchDoc, type EditorState } from '../store/documents'
 import { exportDocx } from '../files/docx-export'
 import SuggestionCard from '../components/SuggestionCard'
 
@@ -38,21 +38,28 @@ export default function EditorPage() {
   const [analytics, setAnalytics] = useState<WritingAnalytics | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const [panel, setPanel] = useState<'grammar' | 'originality'>('grammar')
+  const savedState = stored.current?.editorState
+  const [panel, setPanel] = useState<'grammar' | 'originality'>(savedState?.panelTab ?? 'grammar')
   const [sources, setSources] = useState<Source[]>(stored.current?.sources ?? [])
   const [overlaps, setOverlaps] = useState<OverlapMatch[]>([])
   const [activeOverlap, setActiveOverlap] = useState<string | null>(null)
-  const [panelOpen, setPanelOpen] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(savedState?.panelOpen ?? false)
 
   const editorRef = useRef<TTEditor | null>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const dialectRef = useRef(dialect)
   const titleRef = useRef(title)
   const sourcesRef = useRef(sources)
   sourcesRef.current = sources
-  const dismissedRef = useRef<Set<string>>(new Set())
+  const dismissedRef = useRef<Set<string>>(new Set(savedState?.dismissed ?? []))
+  const panelRef = useRef(panel)
+  panelRef.current = panel
+  const panelOpenRef = useRef(panelOpen)
+  panelOpenRef.current = panelOpen
   const personalRef = useRef<string[]>(getPersonalWords())
   const checkTimer = useRef<number | undefined>(undefined)
   const saveTimer = useRef<number | undefined>(undefined)
+  const scrollTimer = useRef<number | undefined>(undefined)
 
   const renderAlerts = useCallback((sourceText: string, alerts: Alert[]) => {
     const editor = editorRef.current
@@ -126,22 +133,43 @@ export default function EditorPage() {
     }, 500)
   }, [runCheck, runOriginality])
 
+  const collectEditorState = useCallback((): EditorState => {
+    const editor = editorRef.current
+    return {
+      selection: editor ? { from: editor.state.selection.from, to: editor.state.selection.to } : undefined,
+      scrollTop: scrollRef.current?.scrollTop ?? 0,
+      panelOpen: panelOpenRef.current,
+      panelTab: panelRef.current,
+      dismissed: [...dismissedRef.current],
+    }
+  }, [])
+
+  const writeDoc = useCallback(() => {
+    if (!id) return
+    const editor = editorRef.current
+    if (!editor) return
+    const { text } = docText(editor.state.doc)
+    updateDoc(id, {
+      title: titleRef.current,
+      dialect: dialectRef.current,
+      content: editor.getJSON(),
+      words: text.trim() ? text.trim().split(/\s+/).length : 0,
+      sources: sourcesRef.current,
+      editorState: collectEditorState(),
+    })
+  }, [id, collectEditorState])
+
   const scheduleSave = useCallback(() => {
     if (!id) return
     window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => {
-      const editor = editorRef.current
-      if (!editor) return
-      const { text } = docText(editor.state.doc)
-      updateDoc(id, {
-        title: titleRef.current,
-        dialect: dialectRef.current,
-        content: editor.getJSON(),
-        words: text.trim() ? text.trim().split(/\s+/).length : 0,
-        sources: sourcesRef.current,
-      })
-    }, 700)
-  }, [id])
+    saveTimer.current = window.setTimeout(writeDoc, 700)
+  }, [id, writeDoc])
+
+  // persist UI-only state (cursor/scroll/panel) without bumping updatedAt
+  const persistUiState = useCallback(() => {
+    if (!id) return
+    saveEditorState(id, collectEditorState())
+  }, [id, collectEditorState])
 
   const setActive = useCallback((alertId: string | null, focusEditor = false) => {
     setActiveId(alertId)
@@ -188,8 +216,56 @@ export default function EditorPage() {
 
   useEffect(() => {
     editorRef.current = editor
-    if (editor) runCheck()
+    if (!editor) return
+    runCheck()
+    // restore where the user left off
+    if (id) touchDoc(id)
+    const st = stored.current?.editorState
+    if (st?.selection) {
+      const max = editor.state.doc.content.size
+      const from = Math.min(st.selection.from, max)
+      const to = Math.min(st.selection.to, max)
+      try {
+        editor.commands.setTextSelection({ from, to })
+      } catch {
+        /* doc shape changed — ignore */
+      }
+    }
+    if (st?.scrollTop && scrollRef.current) {
+      // wait a frame so layout (and decorations) settle before scrolling
+      requestAnimationFrame(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = st.scrollTop!
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, runCheck])
+
+  // persist panel open/tab changes (skip the initial mount)
+  const panelMounted = useRef(false)
+  useEffect(() => {
+    if (!panelMounted.current) {
+      panelMounted.current = true
+      return
+    }
+    persistUiState()
+  }, [panel, panelOpen, persistUiState])
+
+  // flush the latest content + restore state when the tab is hidden/closed,
+  // so an abrupt close still leaves the project exactly where it was
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === 'hidden') {
+        window.clearTimeout(saveTimer.current)
+        writeDoc()
+      }
+    }
+    document.addEventListener('visibilitychange', flush)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      document.removeEventListener('visibilitychange', flush)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [writeDoc])
 
   useEffect(() => {
     dialectRef.current = dialect
@@ -224,6 +300,12 @@ export default function EditorPage() {
     dismissedRef.current.add(fingerprint(alert))
     if (activeId === alert.id) setActiveId(null)
     runCheck()
+    persistUiState()
+  }
+
+  const onScroll = () => {
+    window.clearTimeout(scrollTimer.current)
+    scrollTimer.current = window.setTimeout(persistUiState, 400)
   }
 
   const addToDictionary = (alert: Alert) => {
@@ -336,7 +418,7 @@ export default function EditorPage() {
       <Toolbar editor={editor} counts={counts} />
 
       <div className="editor-body">
-        <div className="editor-scroll">
+        <div className="editor-scroll" ref={scrollRef} onScroll={onScroll}>
           <div className="paper">
             <EditorContent editor={editor} />
           </div>

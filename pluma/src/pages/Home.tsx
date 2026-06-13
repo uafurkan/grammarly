@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { createDoc } from '../store/documents'
+import { createDoc, listDocsFull } from '../store/documents'
 import { pickAndImport, routeFor } from '../files/upload'
+import { textPreview } from '../store/preview'
 
 export default function Home() {
   const navigate = useNavigate()
   const [notice, setNotice] = useState<string | null>(null)
+  const recents = listDocsFull().slice(0, 3)
 
   useEffect(() => {
     if (!notice) return
@@ -39,6 +41,27 @@ export default function Home() {
           <button className="btn" onClick={upload}>Open a file — Word, PDF, Excel</button>
         </div>
 
+        {recents.length > 0 && (
+          <div className="home-recents">
+            <div className="home-recents-head">
+              <h3>Pick up where you left off</h3>
+              <Link to="/docs" className="btn btn--quiet">All documents</Link>
+            </div>
+            <div className="home-recents-list">
+              {recents.map((d) => (
+                <button key={d.id} className="home-recent" onClick={() => navigate(routeFor(d))}>
+                  <span className="home-recent-title">{d.title || 'Untitled document'}</span>
+                  <span className="home-recent-preview">{textPreview(d, 70)}</span>
+                  <span className="home-recent-meta">
+                    {d.kind === 'sheet' ? 'Spreadsheet' : d.kind === 'pdf' ? 'PDF' : 'Document'} ·{' '}
+                    {new Date(d.updatedAt).toLocaleDateString()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="notes">
           <div>
             <h3>Two languages, four voices</h3>
@@ -50,9 +73,8 @@ export default function Home() {
           <div>
             <h3>Room for real work</h3>
             <p>
-              Word, PDF and Excel files up to 400,000 characters and
-              25&nbsp;MB — four times what the usual tools allow. Your thesis
-              fits.
+              Word, PDF and Excel files up to 100&nbsp;MB — far past what the
+              usual tools allow. Your whole thesis fits, and it stays put.
             </p>
           </div>
           <div>

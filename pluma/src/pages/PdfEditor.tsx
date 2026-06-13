@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { checkAsync } from '../engine/checker'
 import { getPersonalWords } from '../engine/personal'
 import { DIALECT_LABELS, type Alert, type Dialect } from '../engine/types'
-import { createDoc, getDoc, updateDoc } from '../store/documents'
+import { createDoc, getDoc, updateDoc, touchDoc } from '../store/documents'
 import { getBlob } from '../store/blobs'
 import { loadPdf, renderPage, type RenderedPage } from '../files/pdf-render'
 import { exportCorrectedPdf, type Correction } from '../files/pdf-export'
@@ -48,6 +48,13 @@ export default function PdfEditor() {
 
   const bytesRef = useRef<ArrayBuffer | null>(null)
   const pagesRef = useRef<RenderedPage[]>([])
+  const loadedRef = useRef(false)
+
+  // persist accepted corrections so they survive closing/reopening the PDF
+  useEffect(() => {
+    if (!id || !loadedRef.current) return
+    updateDoc(id, { editorState: { corrections: [...applied.values()] } })
+  }, [applied, id])
 
   // --- load + render ---
   useEffect(() => {
@@ -92,6 +99,20 @@ export default function PdfEditor() {
           setOcrStatus(null)
           setPages([...rendered])
         }
+
+        // restore accepted corrections from a previous session
+        const saved = meta.current.editorState?.corrections ?? []
+        if (saved.length > 0) {
+          const restored = new Map<string, Applied>()
+          for (const c of saved) {
+            if (rendered[c.pageIndex]?.items[c.itemIndex]) {
+              restored.set(`${c.pageIndex}:${c.itemIndex}`, c)
+            }
+          }
+          if (restored.size > 0) setApplied(restored)
+        }
+        loadedRef.current = true
+        touchDoc(id)
         void runCheck(rendered, dialect)
       } catch (e) {
         if (cancelled) return

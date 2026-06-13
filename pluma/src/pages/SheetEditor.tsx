@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { check, fingerprint } from '../engine/checker'
 import { DIALECT_LABELS, type Alert, type Dialect } from '../engine/types'
-import { getDoc, updateDoc } from '../store/documents'
+import { getDoc, updateDoc, saveEditorState, touchDoc, type EditorState } from '../store/documents'
 import { exportXlsx, newSheetContent, type SheetContent } from '../files/xlsx-import'
 import SuggestionCard from '../components/SuggestionCard'
 
@@ -36,17 +36,20 @@ export default function SheetEditor() {
     ? (stored.current!.content as SheetContent)
     : newSheetContent()
 
+  const savedState = stored.current?.editorState
   const [content, setContent] = useState<SheetContent>(initial)
-  const [sheetIdx, setSheetIdx] = useState(0)
+  const [sheetIdx, setSheetIdx] = useState(
+    savedState?.sheetIdx != null && savedState.sheetIdx < initial.sheets.length ? savedState.sheetIdx : 0,
+  )
   const [title, setTitle] = useState(stored.current?.title ?? '')
   const [dialect, setDialect] = useState<Dialect>(stored.current?.dialect ?? 'en-US')
-  const [active, setActive] = useState<{ r: number; c: number } | null>(null)
+  const [active, setActive] = useState<{ r: number; c: number } | null>(savedState?.activeCell ?? null)
   const [alerts, setAlerts] = useState<SheetAlert[]>([])
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [panelOpen, setPanelOpen] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(savedState?.panelOpen ?? false)
 
-  const dismissedRef = useRef<Set<string>>(new Set())
+  const dismissedRef = useRef<Set<string>>(new Set(savedState?.dismissed ?? []))
   const checkTimer = useRef<number | undefined>(undefined)
   const saveTimer = useRef<number | undefined>(undefined)
   const contentRef = useRef(content)
@@ -93,26 +96,65 @@ export default function SheetEditor() {
     checkTimer.current = window.setTimeout(runCheck, 500)
   }, [runCheck])
 
+  const uiStateRef = useRef<EditorState>({})
+  uiStateRef.current = {
+    activeCell: active ?? undefined,
+    sheetIdx,
+    panelOpen,
+    dismissed: [...dismissedRef.current],
+  }
+
+  const writeDoc = useCallback(() => {
+    if (!id) return
+    const filled = contentRef.current.sheets.reduce(
+      (n, s) => n + s.rows.reduce((m, r) => m + r.filter(Boolean).length, 0),
+      0,
+    )
+    updateDoc(id, {
+      title: titleRef.current,
+      dialect: dialectRef.current,
+      content: contentRef.current,
+      words: filled,
+      editorState: uiStateRef.current,
+    })
+  }, [id])
+
   const scheduleSave = useCallback(() => {
     if (!id) return
     window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => {
-      const filled = contentRef.current.sheets.reduce(
-        (n, s) => n + s.rows.reduce((m, r) => m + r.filter(Boolean).length, 0),
-        0,
-      )
-      updateDoc(id, {
-        title: titleRef.current,
-        dialect: dialectRef.current,
-        content: contentRef.current,
-        words: filled,
-      })
-    }, 700)
-  }, [id])
+    saveTimer.current = window.setTimeout(writeDoc, 700)
+  }, [id, writeDoc])
+
+  // persist active-cell / sheet-tab / panel without bumping updatedAt
+  const uiMounted = useRef(false)
+  useEffect(() => {
+    if (!uiMounted.current) {
+      uiMounted.current = true
+      return
+    }
+    if (id) saveEditorState(id, uiStateRef.current)
+  }, [active, sheetIdx, panelOpen, id])
 
   useEffect(() => {
     runCheck()
-  }, [runCheck])
+    if (id) touchDoc(id)
+  }, [runCheck, id])
+
+  // flush latest content + state when the tab is hidden/closed
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === 'hidden') {
+        window.clearTimeout(saveTimer.current)
+        writeDoc()
+      }
+    }
+    document.addEventListener('visibilitychange', flush)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      document.removeEventListener('visibilitychange', flush)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [writeDoc])
 
   const setCell = (r: number, c: number, value: string) => {
     setContent((prev) => {
