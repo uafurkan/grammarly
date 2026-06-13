@@ -1,6 +1,7 @@
 import type { Dialect } from '../engine/types'
 import type { Source } from '../engine/originality'
 import type { WritingGoals } from '../engine/goals'
+import type { Reference } from '../engine/citations'
 
 export type DocKind = 'text' | 'sheet' | 'pdf'
 
@@ -20,7 +21,7 @@ export interface EditorState {
   /** scroll offset of the editing surface */
   scrollTop?: number
   panelOpen?: boolean
-  panelTab?: 'grammar' | 'originality'
+  panelTab?: 'grammar' | 'originality' | 'citations'
   /** dismissed suggestion fingerprints (engine/checker fingerprint()) */
   dismissed?: string[]
   /** spreadsheet: active cell + visible sheet tab */
@@ -37,6 +38,8 @@ export interface StoredDoc extends DocMeta {
   sources?: Source[]
   /** writing goals (audience/formality/domain/intent) that tune which alerts show */
   goals?: WritingGoals
+  /** managed bibliography for the citation generator */
+  references?: Reference[]
   /** restore-where-you-left-off state */
   editorState?: EditorState
   /** last time the document was opened (for "continue" / recents) */

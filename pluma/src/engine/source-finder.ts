@@ -25,6 +25,10 @@ export interface FoundSource {
   year: number | null
   url: string
   abstract: string
+  /** journal / venue / site name, when known — used by the citation generator */
+  container?: string
+  /** DOI, when known */
+  doi?: string
   similarity: number // 0..1
   via: SourceVia
 }
@@ -190,13 +194,15 @@ async function searchOpenAlex(query: string, signal: AbortSignal): Promise<Found
     year: w.publication_year ?? null,
     url: w.doi ?? w.primary_location?.landing_page_url ?? w.id,
     abstract: reconstructAbstract(w.abstract_inverted_index),
+    container: w.primary_location?.source?.display_name,
+    doi: w.doi ? w.doi.replace(/^https?:\/\/doi\.org\//, '') : undefined,
     similarity: 0,
     via: 'OpenAlex' as const,
   }))
 }
 
 async function searchCrossref(query: string, signal: AbortSignal): Promise<FoundSource[]> {
-  const url = `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(query)}&rows=8&select=title,author,issued,DOI,URL,abstract`
+  const url = `https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(query)}&rows=8&select=title,author,issued,DOI,URL,abstract,container-title`
   const res = await fetch(url, { signal })
   if (!res.ok) return []
   const data = (await res.json()) as { message?: { items?: CrossrefItem[] } }
@@ -209,6 +215,8 @@ async function searchCrossref(query: string, signal: AbortSignal): Promise<Found
     year: it.issued?.['date-parts']?.[0]?.[0] ?? null,
     url: it.URL ?? (it.DOI ? `https://doi.org/${it.DOI}` : ''),
     abstract: (it.abstract ?? '').replace(/<[^>]+>/g, ' ').trim().slice(0, 1500),
+    container: it['container-title']?.[0],
+    doi: it.DOI,
     similarity: 0,
     via: 'Crossref' as const,
   }))
@@ -456,7 +464,7 @@ interface OpenAlexWork {
   doi?: string
   authorships?: { author?: { display_name?: string } }[]
   abstract_inverted_index?: Record<string, number[]>
-  primary_location?: { landing_page_url?: string }
+  primary_location?: { landing_page_url?: string; source?: { display_name?: string } }
 }
 
 interface CrossrefItem {
@@ -466,6 +474,7 @@ interface CrossrefItem {
   abstract?: string
   author?: { given?: string; family?: string }[]
   issued?: { 'date-parts'?: number[][] }
+  'container-title'?: string[]
 }
 
 interface SsWork {

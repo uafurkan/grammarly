@@ -601,6 +601,32 @@ select.dialect {
 .word-pop-chip:hover { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); }
 .word-pop-chip--ant { color: var(--muted); }
 
+/* ---------- citations / bibliography ---------- */
+.cite-styles { display: flex; gap: 4px; }
+.cite-style {
+  flex: 1;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 7px 0;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cite-style:hover { color: var(--ink); }
+.cite-style.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
+.cite-card {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--paper);
+}
+.cite-text { font-size: 13px; line-height: 1.5; color: var(--ink); word-break: break-word; }
+.cite-text em { font-style: italic; }
+.cite-actions { display: flex; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
+.cite-actions .btn { padding: 4px 10px; font-size: 12px; }
+
 .src-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .src-row {
   display: flex;

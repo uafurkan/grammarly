@@ -25,6 +25,8 @@ import SuggestionCard from '../components/SuggestionCard'
 import OriginalityPanel from '../components/OriginalityPanel'
 import GoalsModal from '../components/GoalsModal'
 import WordPopover from '../components/WordPopover'
+import BibliographyPanel from '../components/BibliographyPanel'
+import { fromFoundSource, type Reference } from '../engine/citations'
 
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -53,8 +55,11 @@ export default function EditorPage() {
   const acCtrl = useRef<AbortController | null>(null)
 
   const savedState = stored.current?.editorState
-  const [panel, setPanel] = useState<'grammar' | 'originality'>(savedState?.panelTab ?? 'grammar')
+  const [panel, setPanel] = useState<'grammar' | 'originality' | 'citations'>(savedState?.panelTab ?? 'grammar')
   const [sources, setSources] = useState<Source[]>(stored.current?.sources ?? [])
+  const [references, setReferences] = useState<Reference[]>(stored.current?.references ?? [])
+  const referencesRef = useRef(references)
+  referencesRef.current = references
   const [overlaps, setOverlaps] = useState<OverlapMatch[]>([])
   const [activeOverlap, setActiveOverlap] = useState<string | null>(null)
   const [origPhase, setOrigPhase] = useState<'idle' | 'comparing' | 'done'>('idle')
@@ -250,9 +255,40 @@ export default function EditorPage() {
       words: text.trim() ? text.trim().split(/\s+/).length : 0,
       sources: sourcesRef.current,
       goals: goalsRef.current,
+      references: referencesRef.current,
       editorState: collectEditorState(),
     })
   }, [id, collectEditorState])
+
+  const addReference = (ref: Reference) => {
+    const next = [...referencesRef.current, ref]
+    setReferences(next)
+    referencesRef.current = next
+    scheduleSave()
+  }
+
+  const removeReference = (rid: string) => {
+    const next = referencesRef.current.filter((r) => r.id !== rid)
+    setReferences(next)
+    referencesRef.current = next
+    scheduleSave()
+  }
+
+  const insertAtCursor = (text: string) => {
+    const ed = editorRef.current
+    if (!ed) return
+    ed.chain().focus().insertContent(text).run()
+    scheduleSave()
+  }
+
+  const appendToDoc = (text: string) => {
+    const ed = editorRef.current
+    if (!ed) return
+    const end = ed.state.doc.content.size
+    const block = text.split('\n').map((line) => ({ type: 'paragraph', content: line ? [{ type: 'text', text: line }] : [] }))
+    ed.chain().focus().insertContentAt(end, block).run()
+    scheduleSave()
+  }
 
   const changeGoals = (g: WritingGoals) => {
     setGoals(g)
@@ -632,9 +668,23 @@ export default function EditorPage() {
             >
               Originality{origPhase === 'done' && overlaps.length > 0 ? ` (${overlaps.length})` : ''}
             </button>
+            <button
+              className={panel === 'citations' ? 'on' : ''}
+              onClick={() => setPanel('citations')}
+            >
+              Citations{references.length > 0 ? ` (${references.length})` : ''}
+            </button>
           </div>
 
-          {panel === 'originality' ? (
+          {panel === 'citations' ? (
+            <BibliographyPanel
+              references={references}
+              onRemove={removeReference}
+              onAddByDoi={addReference}
+              onInsertInText={insertAtCursor}
+              onInsertList={appendToDoc}
+            />
+          ) : panel === 'originality' ? (
             <OriginalityPanel
               sources={sources}
               overlaps={overlaps}
@@ -648,7 +698,10 @@ export default function EditorPage() {
               onQuote={quoteOverlap}
               onCite={citeOverlap}
               onFind={() => findSources(docText(editorRef.current!.state.doc).text, { limit: 10 })}
-              onAddFound={(s) => addSource(`${s.authors || s.via}${s.year ? `, ${s.year}` : ''}`, `${s.title}. ${s.abstract}`)}
+              onAddFound={(s) => {
+                addSource(`${s.authors || s.via}${s.year ? `, ${s.year}` : ''}`, `${s.title}. ${s.abstract}`)
+                addReference(fromFoundSource(s))
+              }}
             />
           ) : (
           <>
