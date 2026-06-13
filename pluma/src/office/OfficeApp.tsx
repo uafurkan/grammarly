@@ -1,15 +1,32 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { check, checkAsync, fingerprint } from '../engine/checker'
 import { getPersonalWords, addPersonalWord } from '../engine/personal'
 import { analyzeText, analyzeTone, type WritingAnalytics, type ToneScore } from '../engine/analytics'
-import { DIALECT_LABELS, type Alert, type Dialect } from '../engine/types'
+import { DIALECT_LABELS, type Alert, type Category, type Dialect } from '../engine/types'
 import SuggestionCard from '../components/SuggestionCard'
 import { readDocText, applyReplacement, selectOccurrence, occurrenceBefore } from './word'
 
+type Filter = 'all' | Category
+
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'correctness', label: 'Correctness' },
+  { id: 'clarity', label: 'Clarity' },
+]
+
+// How often the live checker polls the document for changes while idle. Office.js
+// has no reliable "body changed" event, so — like Grammarly's own add-in — we poll.
+const LIVE_POLL_MS = 2200
+
 /**
  * Pluma inside Word. Reuses the exact same engine as the web app — the only
- * Word-specific code is the Office.js bridge in word.ts. Scans the document on
- * demand, lists issues, and applies a fix straight into the document.
+ * Word-specific code is the Office.js bridge in word.ts.
+ *
+ * Beyond a one-shot scan it offers a live mode that re-checks as you type, a
+ * click-to-locate flow that selects the flagged text in the document, and
+ * category tabs — matching (and going past) what Grammarly's Office add-in does.
+ * Inline squiggles on the page are intentionally absent: the Office JavaScript
+ * API cannot draw non-persistent underlines, a limit Grammarly hits too.
  */
 export default function OfficeApp() {
   const [dialect, setDialect] = useState<Dialect>('en-US')
@@ -19,8 +36,26 @@ export default function OfficeApp() {
   const [tone, setTone] = useState<ToneScore | null>(null)
   const [docText, setDocText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [liveBusy, setLiveBusy] = useState(false)
   const [checked, setChecked] = useState(false)
+  const [live, setLive] = useState(true)
+  const [filter, setFilter] = useState<Filter>('all')
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+
+  // Refs let the idle poller read the latest values without being torn down and
+  // re-created on every keystroke of state — the interval is set up exactly once.
+  const liveRef = useRef(live)
+  const checkedRef = useRef(checked)
+  const runningRef = useRef(false)
+  const lastTextRef = useRef('')
+  const dialectRef = useRef(dialect)
+  const dismissedRef = useRef(dismissed)
+
+  useEffect(() => { liveRef.current = live }, [live])
+  useEffect(() => { checkedRef.current = checked }, [checked])
+  useEffect(() => { dialectRef.current = dialect }, [dialect])
+  useEffect(() => { dismissedRef.current = dismissed }, [dismissed])
 
   useEffect(() => {
     if (!notice) return
@@ -28,26 +63,64 @@ export default function OfficeApp() {
     return () => window.clearTimeout(t)
   }, [notice])
 
-  const runCheck = async () => {
-    setBusy(true)
+  /**
+   * The single source of truth for a scan. `silent` powers the live path: it
+   * skips the blocking spinner and the instant-pass flash, and leaves the user's
+   * place untouched. `text` lets the poller hand over the body it already read.
+   */
+  const performCheck = useCallback(async (opts: { silent?: boolean; text?: string } = {}) => {
+    if (runningRef.current) return
+    runningRef.current = true
+    if (opts.silent) setLiveBusy(true)
+    else setBusy(true)
     try {
-      const text = await readDocText()
+      const text = opts.text ?? (await readDocText())
+      lastTextRef.current = text
       setDocText(text)
       const personal = getPersonalWords()
-      const instant = check(text, dialect).filter((a) => !dismissed.has(fingerprint(a)))
-      setAlerts(instant)
-      const full = await checkAsync(text, dialect, personal)
-      setAlerts(full.filter((a) => !dismissed.has(fingerprint(a))))
-      const enough = text.trim().split(/\s+/).length >= 30
+      // On a manual check, paint the instant (sync) pass first so something shows
+      // immediately; the live path skips it to avoid a visible flicker.
+      if (!opts.silent) {
+        setAlerts(check(text, dialectRef.current).filter((a) => !dismissedRef.current.has(fingerprint(a))))
+      }
+      const full = await checkAsync(text, dialectRef.current, personal)
+      setAlerts(full.filter((a) => !dismissedRef.current.has(fingerprint(a))))
+      const enough = text.trim().split(/\s+/).filter(Boolean).length >= 30
       setAnalytics(enough ? analyzeText(text) : null)
       setTone(enough ? analyzeTone(text) : null)
       setChecked(true)
+      checkedRef.current = true
     } catch {
-      setNotice('Could not read the document.')
+      if (!opts.silent) setNotice('Could not read the document.')
     } finally {
+      runningRef.current = false
       setBusy(false)
+      setLiveBusy(false)
     }
-  }
+  }, [])
+
+  // Idle poller: once a first check has run, watch the document for edits and
+  // re-check quietly. Cheap guards keep it from overlapping or doing needless work.
+  useEffect(() => {
+    const id = window.setInterval(async () => {
+      if (!liveRef.current || !checkedRef.current || runningRef.current) return
+      let text: string
+      try {
+        text = await readDocText()
+      } catch {
+        return
+      }
+      if (text === lastTextRef.current) return
+      void performCheck({ silent: true, text })
+    }, LIVE_POLL_MS)
+    return () => window.clearInterval(id)
+  }, [performCheck])
+
+  // Re-check (quietly) when the dialect changes, but only after the first scan.
+  useEffect(() => {
+    if (checkedRef.current) void performCheck({ silent: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialect])
 
   const applyFix = async (alert: Alert, index: number) => {
     const replacement = alert.replacements[index]
@@ -57,7 +130,9 @@ export default function OfficeApp() {
       const ok = await applyReplacement(alert.text, replacement, occ)
       if (!ok) { setNotice('Could not find that text to replace.'); return }
       setAlerts((prev) => prev.filter((a) => a.id !== alert.id))
-      window.setTimeout(runCheck, 200)
+      if (activeId === alert.id) setActiveId(null)
+      // Let Word settle, then re-scan quietly so the list stays in sync.
+      window.setTimeout(() => void performCheck({ silent: true }), 250)
     } catch {
       setNotice('Could not apply the change.')
     }
@@ -66,19 +141,31 @@ export default function OfficeApp() {
   const dismiss = (alert: Alert) => {
     setDismissed((prev) => new Set(prev).add(fingerprint(alert)))
     setAlerts((prev) => prev.filter((a) => a.id !== alert.id))
+    if (activeId === alert.id) setActiveId(null)
   }
 
   const addToDictionary = (alert: Alert) => {
     addPersonalWord(alert.text)
     setAlerts((prev) => prev.filter((a) => a.id !== alert.id))
+    if (activeId === alert.id) setActiveId(null)
   }
 
   const jumpTo = (alert: Alert) => {
+    setActiveId(alert.id)
     const occ = occurrenceBefore(docText, alert.text, alert.begin)
     void selectOccurrence(alert.text, occ)
   }
 
-  const correctness = alerts.filter((a) => a.category === 'correctness').length
+  const counts = useMemo(() => ({
+    all: alerts.length,
+    correctness: alerts.filter((a) => a.category === 'correctness').length,
+    clarity: alerts.filter((a) => a.category === 'clarity').length,
+  }), [alerts])
+
+  const visible = useMemo(
+    () => (filter === 'all' ? alerts : alerts.filter((a) => a.category === filter)),
+    [alerts, filter],
+  )
 
   return (
     <div className="office-pane">
@@ -89,16 +176,36 @@ export default function OfficeApp() {
         </select>
       </div>
 
-      <button className="btn btn--primary office-check" onClick={runCheck} disabled={busy}>
+      <button className="btn btn--primary office-check" onClick={() => void performCheck()} disabled={busy}>
         {busy ? 'Checking…' : checked ? '↻ Re-check document' : 'Check document'}
       </button>
 
+      <div className="office-controls">
+        <label className="office-live" title="Re-check automatically as you type">
+          <input type="checkbox" checked={live} onChange={(e) => setLive(e.target.checked)} />
+          <span className="office-live-track"><span className="office-live-thumb" /></span>
+          <span className="office-live-text">
+            Live
+            {live && checked && <span className={`office-live-dot${liveBusy ? ' on' : ''}`} />}
+          </span>
+        </label>
+      </div>
+
       {checked && (
-        <p className="sub office-summary">
-          {alerts.length === 0
-            ? 'No issues found — nicely done.'
-            : `${correctness} correctness · ${alerts.length - correctness} clarity`}
-        </p>
+        <div className="office-tabs" role="tablist">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              role="tab"
+              aria-selected={filter === f.id}
+              className={`office-tab${filter === f.id ? ' on' : ''}`}
+              onClick={() => setFilter(f.id)}
+              disabled={f.id !== 'all' && counts[f.id] === 0}
+            >
+              {f.label}<span className="office-tab-n">{counts[f.id]}</span>
+            </button>
+          ))}
+        </div>
       )}
 
       {analytics && (
@@ -124,12 +231,14 @@ export default function OfficeApp() {
       <div className="office-list">
         {checked && alerts.length === 0 ? (
           <div className="clean"><span className="mark">✓</span>Nothing to flag.</div>
+        ) : checked && visible.length === 0 ? (
+          <div className="clean"><span className="mark">✓</span>No {filter} issues.</div>
         ) : (
-          alerts.map((a) => (
+          visible.map((a) => (
             <SuggestionCard
               key={a.id}
               alert={a}
-              active={false}
+              active={a.id === activeId}
               onClick={() => jumpTo(a)}
               onAccept={(index) => applyFix(a, index)}
               onDismiss={() => dismiss(a)}
@@ -142,7 +251,8 @@ export default function OfficeApp() {
       {!checked && (
         <p className="office-hint">
           Pluma checks grammar, spelling, and clarity right inside Word — free,
-          and your text stays on your device. Press “Check document” to start.
+          and your text stays on your device. Press “Check document” to start;
+          leave <b>Live</b> on and it keeps up as you write.
         </p>
       )}
 
