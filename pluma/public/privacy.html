@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — Pluma</title>
+  <meta name="description" content="Pluma's privacy policy: your text stays on your device. No accounts, no tracking, no servers." />
+  <link rel="icon" href="/icon.svg" />
+  <style>
+    :root {
+      --bg: #f4f2ec; --paper: #fdfcf8; --ink: #26241f; --muted: #6e6a5f;
+      --faint: #9b968a; --rule: #e3dfd3; --accent: #2f5d3a; --accent-soft: #e8efe9;
+      --serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+      --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans);
+      line-height: 1.6; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 32px 24px 80px; }
+    .topbar { display: flex; align-items: center; gap: 16px; padding: 8px 0 28px; }
+    .brand { font-family: var(--serif); font-size: 22px; font-weight: 600; color: var(--ink);
+      text-decoration: none; }
+    .brand em { color: var(--accent); font-style: italic; }
+    .spacer { flex: 1; }
+    .topbar a.nav { color: var(--muted); text-decoration: none; font-size: 14px; }
+    .topbar a.nav:hover { color: var(--ink); }
+    h1 { font-family: var(--serif); font-weight: 600; font-size: 34px; margin: 0 0 6px; }
+    .updated { color: var(--faint); font-size: 14px; margin: 0 0 28px; }
+    h2 { font-family: var(--serif); font-weight: 600; font-size: 21px; margin: 34px 0 10px; }
+    p, li { color: #322f29; font-size: 16px; }
+    a { color: var(--accent); }
+    .lede { font-size: 18px; color: var(--muted); }
+    .card { background: var(--paper); border: 1px solid var(--rule); border-radius: 12px;
+      padding: 18px 22px; margin: 20px 0; box-shadow: 0 1px 2px rgba(38,36,31,.05); }
+    .card.good { background: var(--accent-soft); border-color: #cfe0d3; }
+    ul { padding-left: 22px; }
+    li { margin: 6px 0; }
+    strong { color: var(--ink); }
+    footer { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--rule);
+      color: var(--faint); font-size: 13.5px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <a class="brand" href="/">Plu<em>ma</em></a>
+      <span class="spacer"></span>
+      <a class="nav" href="/">Home</a>
+      <a class="nav" href="/terms.html">Terms</a>
+    </div>
+
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: 13 June 2026</p>
+
+    <p class="lede">
+      Pluma is built on one promise: your writing is yours. It never leaves your
+      device to be analysed, and there is no account to create and no profile to
+      build.
+    </p>
+
+    <div class="card good">
+      <p style="margin:0"><strong>The short version.</strong> Pluma has no
+      servers that see your text, no analytics, no advertising, and no tracking.
+      Everything you write is checked on your own device — in your browser or
+      inside Word — and stored only on that device until you remove it.</p>
+    </div>
+
+    <h2>What we collect</h2>
+    <p>
+      <strong>Nothing.</strong> Pluma does not have a backend that receives your
+      documents. We do not collect your name, email, IP address, location, or
+      any usage statistics. There are no cookies used for tracking, no
+      fingerprinting, and no third-party advertising or analytics scripts.
+    </p>
+
+    <h2>Where your text is processed</h2>
+    <p>
+      All grammar, spelling, clarity, tone, and readability checking runs
+      <strong>entirely on your device</strong>. The dictionaries and rules are
+      downloaded once and cached locally; from then on, checking works even with
+      no internet connection. The same is true of the Word add-in: your document
+      text is read by the add-in in Word's own task pane and processed locally —
+      it is never uploaded to us.
+    </p>
+
+    <h2>Where your work is stored</h2>
+    <p>
+      Documents you create or open are saved <strong>locally in your browser</strong>
+      using its built-in storage (localStorage and IndexedDB). They stay on your
+      device until you delete them or clear your browser data. We cannot see
+      them, and they are not synced to any server. If you want a backup or to
+      move your work to another device, you can export it to a file yourself and
+      import it elsewhere — that transfer happens directly through your own file,
+      not through us.
+    </p>
+
+    <h2>Optional features that use the internet</h2>
+    <p>
+      A few features reach out to free, public services <em>only when you choose
+      to use them</em>. When you do, your query — not your full document — is
+      sent to that service, and its own privacy policy applies:
+    </p>
+    <ul>
+      <li><strong>Find sources / citations.</strong> Searching academic databases
+        or looking up a DOI queries the free OpenAlex and Crossref APIs with your
+        search terms.</li>
+      <li><strong>Synonyms &amp; suggestions.</strong> The optional thesaurus and
+        word suggestions query the free Datamuse API with the single word or
+        short phrase you are working on.</li>
+    </ul>
+    <p>
+      If you are offline, these features fall back gracefully and Pluma keeps
+      working. None of them send your whole document anywhere.
+    </p>
+
+    <h2>On-device AI</h2>
+    <p>
+      Pluma's optional AI assistance runs a small language model
+      <strong>inside your browser</strong> (via WebGPU). The model is downloaded
+      once and cached; after that, rewriting and other AI help happen locally.
+      Your text is not sent to any AI server.
+    </p>
+
+    <h2>Children's privacy</h2>
+    <p>
+      Pluma collects no personal information from anyone, including children.
+      Because there is no account and no data collection, there is nothing to
+      gather about users of any age.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+      If this policy changes, the "Last updated" date above will change with it.
+      Material changes will be reflected on this page.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Questions about privacy? Email
+      <a href="mailto:furkanhlkk@gmail.com">furkanhlkk@gmail.com</a>.
+    </p>
+
+    <footer>
+      Pluma · a free, private writing desk · your documents stay on your device
+    </footer>
+  </div>
+</body>
+</html>

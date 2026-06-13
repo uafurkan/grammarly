@@ -143,6 +143,10 @@ select.dialect {
   border-top: 1px solid var(--rule);
 }
 
+.home footer a, .install-footer a { color: var(--muted); text-decoration: none; }
+.home footer a:hover, .install-footer a:hover { color: var(--ink); }
+.foot-sep { opacity: 0.5; }
+
 /* ---------- documents ---------- */
 
 .docs {

@@ -89,7 +89,13 @@ export default function Home() {
         </div>
       </main>
 
-      <footer>Pluma · writing assistant for students · documents stay in your browser</footer>
+      <footer>
+        Pluma · writing assistant for students · documents stay in your browser
+        <span className="foot-sep"> · </span>
+        <a href="/privacy.html">Privacy</a>
+        <span className="foot-sep"> · </span>
+        <a href="/terms.html">Terms</a>
+      </footer>
       {notice && <div className="notice">{notice}</div>}
     </div>
   )
