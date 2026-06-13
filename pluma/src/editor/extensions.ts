@@ -18,6 +18,7 @@ import { Extension } from '@tiptap/core'
 import { Suggestions } from './suggestions-plugin'
 import { Originality } from './originality-plugin'
 import { Hemingway } from './hemingway-plugin'
+import { Autocomplete } from './autocomplete-plugin'
 
 // font-size mark attribute on TextStyle, so DOCX sizes survive round-trips
 const FontSize = Extension.create({
@@ -66,5 +67,6 @@ export function buildExtensions(
     Suggestions.configure({ onAlertClick }),
     Originality.configure({ onClick: onOverlapClick }),
     Hemingway,
+    Autocomplete,
   ]
 }

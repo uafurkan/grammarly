@@ -5,7 +5,9 @@ import { buildExtensions } from '../editor/extensions'
 import { alertRange, docText, suggestionsKey } from '../editor/suggestions-plugin'
 import { originalityKey, overlapRange } from '../editor/originality-plugin'
 import { hemingwayKey, type RangedMark } from '../editor/hemingway-plugin'
+import { autocompleteKey } from '../editor/autocomplete-plugin'
 import { check, checkAsync, fingerprint } from '../engine/checker'
+import { completions } from '../engine/datamuse'
 import { addPersonalWord, getPersonalWords } from '../engine/personal'
 import { DIALECT_LABELS, type Alert, type Dialect } from '../engine/types'
 import {
@@ -22,6 +24,7 @@ import { exportDocx } from '../files/docx-export'
 import SuggestionCard from '../components/SuggestionCard'
 import OriginalityPanel from '../components/OriginalityPanel'
 import GoalsModal from '../components/GoalsModal'
+import WordPopover from '../components/WordPopover'
 
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -43,6 +46,11 @@ export default function EditorPage() {
   const [goalsOpen, setGoalsOpen] = useState(false)
   const goalsRef = useRef(goals)
   goalsRef.current = goals
+  const [popover, setPopover] = useState<
+    { word: string; before: string; after: string; from: number; to: number; x: number; y: number } | null
+  >(null)
+  const acTimer = useRef<number | undefined>(undefined)
+  const acCtrl = useRef<AbortController | null>(null)
 
   const savedState = stored.current?.editorState
   const [panel, setPanel] = useState<'grammar' | 'originality'>(savedState?.panelTab ?? 'grammar')
@@ -144,6 +152,37 @@ export default function EditorPage() {
     clarityRef.current = next
     renderClarity(next)
   }
+
+  // ghost-text autocomplete: after a short idle, predict the rest of the word
+  // at the cursor and show it as a gray suffix (Tab accepts it).
+  const scheduleAutocomplete = useCallback(() => {
+    window.clearTimeout(acTimer.current)
+    acTimer.current = window.setTimeout(async () => {
+      const editor = editorRef.current
+      if (!editor) return
+      const { state } = editor
+      if (!state.selection.empty) return
+      const pos = state.selection.from
+      const $pos = state.doc.resolve(pos)
+      // only at the end of a word (next char isn't a letter)
+      const next = state.doc.textBetween(pos, Math.min(pos + 1, $pos.end()))
+      if (/[A-Za-z]/.test(next)) return
+      const before = state.doc.textBetween($pos.start(), pos, '\n', '\n')
+      const m = before.match(/[A-Za-z]{3,}$/)
+      if (!m) return
+      const prefix = m[0]
+      acCtrl.current?.abort()
+      acCtrl.current = new AbortController()
+      const list = await completions(prefix, acCtrl.current.signal)
+      const best = list.find(
+        (w) => w.length > prefix.length && w.toLowerCase().startsWith(prefix.toLowerCase()),
+      )
+      if (!best) return
+      const ed = editorRef.current
+      if (!ed || ed.state.selection.from !== pos || !ed.state.selection.empty) return
+      ed.view.dispatch(ed.state.tr.setMeta(autocompleteKey, { ghost: { pos, suffix: best.slice(prefix.length) } }))
+    }, 320)
+  }, [])
 
   const runOriginality = useCallback((): OverlapMatch[] => {
     const editor = editorRef.current
@@ -287,6 +326,7 @@ export default function EditorPage() {
     onUpdate: () => {
       scheduleCheck()
       scheduleSave()
+      scheduleAutocomplete()
     },
   })
 
@@ -315,6 +355,36 @@ export default function EditorPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, runCheck])
+
+  // double-tap a word → thesaurus popover (the browser selects the word for us)
+  useEffect(() => {
+    if (!editor) return
+    const dom = editor.view.dom as HTMLElement
+    const onDbl = (e: MouseEvent) => {
+      window.setTimeout(() => {
+        const { state } = editor
+        const { from, to, empty } = state.selection
+        if (empty || to - from > 40) return
+        const word = state.doc.textBetween(from, to).trim()
+        if (!/^[A-Za-z][A-Za-z'-]{1,}$/.test(word)) return
+        const $from = state.doc.resolve(from)
+        const before = state.doc.textBetween($from.start(), from, ' ', ' ')
+        const after = state.doc.textBetween(to, $from.end(), ' ', ' ')
+        setPopover({ word, before, after, from, to, x: e.clientX, y: e.clientY })
+      }, 0)
+    }
+    dom.addEventListener('dblclick', onDbl)
+    return () => dom.removeEventListener('dblclick', onDbl)
+  }, [editor])
+
+  const replaceWord = (replacement: string) => {
+    const ed = editorRef.current
+    if (!ed || !popover) return
+    ed.chain().focus().insertContentAt({ from: popover.from, to: popover.to }, replacement).run()
+    setPopover(null)
+    runCheck()
+    scheduleSave()
+  }
 
   // persist panel open/tab changes (skip the initial mount)
   const panelMounted = useRef(false)
@@ -524,6 +594,18 @@ export default function EditorPage() {
 
       {goalsOpen && (
         <GoalsModal goals={goals} onSave={changeGoals} onClose={() => setGoalsOpen(false)} />
+      )}
+
+      {popover && (
+        <WordPopover
+          word={popover.word}
+          before={popover.before}
+          after={popover.after}
+          x={popover.x}
+          y={popover.y}
+          onPick={replaceWord}
+          onClose={() => setPopover(null)}
+        />
       )}
 
       <Toolbar editor={editor} counts={counts} />

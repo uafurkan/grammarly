@@ -569,6 +569,38 @@ select.dialect {
 .clarity-legend span { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
 .clarity-legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
 
+/* ---------- ghost-text autocomplete ---------- */
+.pl-ghost { color: var(--faint); opacity: 0.7; pointer-events: none; }
+
+/* ---------- thesaurus popover ---------- */
+.word-pop {
+  position: fixed;
+  z-index: 70;
+  width: 224px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 10px 12px 12px;
+}
+.word-pop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.word-pop-word { font-family: var(--serif); font-size: 15px; color: var(--ink); }
+.word-pop-x { border: none; background: transparent; color: var(--faint); font-size: 18px; line-height: 1; cursor: pointer; }
+.word-pop-empty { color: var(--muted); font-size: 12.5px; padding: 4px 0; }
+.word-pop-sub { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin: 8px 0 5px; }
+.word-pop-group { display: flex; flex-wrap: wrap; gap: 5px; }
+.word-pop-chip {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.word-pop-chip:hover { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent); }
+.word-pop-chip--ant { color: var(--muted); }
+
 .src-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .src-row {
   display: flex;
