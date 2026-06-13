@@ -3,13 +3,17 @@
 // pull in an image dependency. Output goes to public/ and ships with the site.
 
 import { deflateSync } from 'node:zlib'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, copyFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const outDir = join(here, '..', 'public')
 mkdirSync(outDir, { recursive: true })
+
+// serve the add-in manifest from the site so the install page can offer it as a
+// download — single source of truth in office-addin/manifest.xml
+copyFileSync(join(here, '..', 'office-addin', 'manifest.xml'), join(outDir, 'pluma-word.xml'))
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256)

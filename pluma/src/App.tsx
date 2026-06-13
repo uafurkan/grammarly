@@ -4,6 +4,7 @@ import Documents from './pages/Documents'
 import EditorPage from './pages/Editor'
 import SheetEditor from './pages/SheetEditor'
 import PdfEditor from './pages/PdfEditor'
+import WordInstall from './pages/WordInstall'
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
         <Route path="/doc/:id" element={<EditorPage />} />
         <Route path="/sheet/:id" element={<SheetEditor />} />
         <Route path="/pdf/:id" element={<PdfEditor />} />
+        <Route path="/word" element={<WordInstall />} />
       </Routes>
     </HashRouter>
   )

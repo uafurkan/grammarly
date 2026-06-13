@@ -45,6 +45,9 @@ export default defineConfig({
         globIgnores: ['**/web-llm-*.js', '**/ai.worker-*.js', 'office.html', '**/office-*.js'],
         maximumFileSizeToCacheInBytes: 3.5 * 1024 * 1024,
         navigateFallback: 'index.html',
+        // don't let the SPA fallback swallow the add-in manifest download or the
+        // Office task-pane page (Word must receive office.html, not index.html)
+        navigateFallbackDenylist: [/pluma-word\.xml$/, /office\.html$/],
         runtimeCaching: [
           {
             // pdf.js worker (.mjs) + Hunspell dictionaries — cache on first use
