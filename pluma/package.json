@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "predev": "node scripts/copy-dicts.mjs",
-    "build": "node scripts/copy-dicts.mjs && tsc -b && vite build",
+    "build": "node scripts/copy-dicts.mjs && node scripts/make-office-icons.mjs && tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -47,6 +47,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/office-js": "^1.0.592",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",

@@ -1,0 +1,29 @@
+/* Word task-pane layout. Reuses Pluma's design tokens + component styles from
+   index.css; this only handles the narrow pane chrome. */
+
+#root { height: 100%; }
+
+.office-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 14px 18px;
+  background: var(--bg);
+  overflow-y: auto;
+}
+
+.office-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.office-brand { font-family: var(--serif); font-size: 19px; font-weight: 600; color: var(--ink); }
+.office-brand em { color: var(--accent); font-style: normal; }
+.office-host { font-family: var(--sans); font-size: 11px; color: var(--faint); font-weight: 400; }
+
+.office-check { width: 100%; justify-content: center; }
+.office-summary { margin: 12px 0 6px; }
+.office-list { margin-top: 8px; }
+.office-hint { color: var(--muted); font-size: 13px; line-height: 1.55; margin-top: 18px; }

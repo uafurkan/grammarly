@@ -7,6 +7,11 @@ export default defineConfig({
   optimizeDeps: { exclude: ['@mlc-ai/web-llm'] },
   build: {
     rollupOptions: {
+      // two entry points sharing one engine: the web app and the Word add-in
+      input: {
+        main: 'index.html',
+        office: 'office.html',
+      },
       output: {
         manualChunks: { 'web-llm': ['@mlc-ai/web-llm'] },
       },
@@ -36,7 +41,8 @@ export default defineConfig({
         // they must NOT be precached, and big static assets / CDN traffic are
         // handled at runtime instead.
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
-        globIgnores: ['**/web-llm-*.js', '**/ai.worker-*.js'],
+        // the Word add-in is loaded by Office, not the PWA; keep it out of precache
+        globIgnores: ['**/web-llm-*.js', '**/ai.worker-*.js', 'office.html', '**/office-*.js'],
         maximumFileSizeToCacheInBytes: 3.5 * 1024 * 1024,
         navigateFallback: 'index.html',
         runtimeCaching: [
