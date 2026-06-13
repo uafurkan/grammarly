@@ -20,3 +20,15 @@ export function addPersonalWord(word: string): string[] {
   localStorage.setItem(KEY, JSON.stringify(list))
   return list
 }
+
+/** Merges words into the personal dictionary (used when importing a backup). */
+export function mergePersonalWords(words: string[]): string[] {
+  const set = new Set(getPersonalWords())
+  for (const w of words) {
+    const t = w.trim().toLowerCase()
+    if (t) set.add(t)
+  }
+  const list = [...set]
+  localStorage.setItem(KEY, JSON.stringify(list))
+  return list
+}

@@ -38,6 +38,19 @@ export async function getBlob(id: string): Promise<ArrayBuffer | null> {
   return result
 }
 
+/** All stored blob keys — used when exporting a full backup. */
+export async function allBlobKeys(): Promise<string[]> {
+  const db = await open()
+  const keys = await new Promise<string[]>((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly')
+    const req = tx.objectStore(STORE).getAllKeys()
+    req.onsuccess = () => resolve((req.result as IDBValidKey[]).map(String))
+    req.onerror = () => reject(req.error)
+  })
+  db.close()
+  return keys
+}
+
 export async function deleteBlob(id: string): Promise<void> {
   const db = await open()
   await new Promise<void>((resolve) => {

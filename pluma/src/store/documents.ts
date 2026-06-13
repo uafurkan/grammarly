@@ -131,3 +131,26 @@ export function removeDoc(id: string) {
   delete table[id]
   save(table)
 }
+
+/**
+ * Imports documents from a backup bundle. 'replace' wipes the local set first;
+ * 'merge' keeps the newer of each document by updatedAt. Returns the counts.
+ */
+export function importDocs(docs: StoredDoc[], mode: 'merge' | 'replace'): { added: number; updated: number } {
+  const table = mode === 'replace' ? {} : load()
+  let added = 0
+  let updated = 0
+  for (const doc of docs) {
+    if (!doc?.id) continue
+    const existing = table[doc.id]
+    if (!existing) {
+      table[doc.id] = doc
+      added++
+    } else if ((doc.updatedAt ?? 0) > (existing.updatedAt ?? 0)) {
+      table[doc.id] = doc
+      updated++
+    }
+  }
+  save(table)
+  return { added, updated }
+}

@@ -5,6 +5,7 @@ import { DIALECT_LABELS } from '../engine/types'
 import { pickAndImport, routeFor } from '../files/upload'
 import { newSheetContent } from '../files/xlsx-import'
 import { deleteBlob } from '../store/blobs'
+import { exportBundle, importBundle, suggestedFilename } from '../store/sync'
 import { textPreview, recencyBucket, RECENCY_ORDER, type RecencyBucket } from '../store/preview'
 
 function kindLabel(d: StoredDoc): string {
@@ -42,6 +43,44 @@ export default function Documents() {
   }
 
   const upload = () => pickAndImport((doc) => navigate(routeFor(doc)), setNotice)
+
+  const exportAll = async () => {
+    try {
+      setNotice('Packing your data…')
+      const blob = await exportBundle()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = suggestedFilename()
+      a.click()
+      URL.revokeObjectURL(url)
+      setNotice('Backup downloaded. Open it on another device to transfer your work.')
+    } catch {
+      setNotice('Could not export your data.')
+    }
+  }
+
+  const importAll = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.pluma,application/zip'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const replace = window.confirm(
+        'Import backup.\n\nOK = Merge (keep the newer copy of each document)\nCancel = Replace everything on this device',
+      )
+      try {
+        setNotice('Importing…')
+        const res = await importBundle(file, replace ? 'merge' : 'replace')
+        setDocs(listDocsFull())
+        setNotice(`Imported ${res.added} new, updated ${res.updated}${res.blobs ? `, ${res.blobs} file${res.blobs > 1 ? 's' : ''}` : ''}.`)
+      } catch {
+        setNotice('That file is not a valid Pluma backup.')
+      }
+    }
+    input.click()
+  }
 
   const del = (id: string) => {
     removeDoc(id)
@@ -107,6 +146,8 @@ export default function Documents() {
         <div className="head">
           <h1>Documents</h1>
           <div className="row">
+            <button className="btn" onClick={importAll} title="Restore or transfer from a .pluma backup">Import</button>
+            <button className="btn" onClick={exportAll} title="Download all your documents as a backup">Export</button>
             <button className="btn" onClick={upload}>Open a file</button>
             <button className="btn" onClick={newSheet}>New spreadsheet</button>
             <button className="btn btn--primary" onClick={newDoc}>New document</button>
