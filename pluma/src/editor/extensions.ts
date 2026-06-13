@@ -17,6 +17,7 @@ import FontFamily from '@tiptap/extension-font-family'
 import { Extension } from '@tiptap/core'
 import { Suggestions } from './suggestions-plugin'
 import { Originality } from './originality-plugin'
+import { Hemingway } from './hemingway-plugin'
 
 // font-size mark attribute on TextStyle, so DOCX sizes survive round-trips
 const FontSize = Extension.create({
@@ -64,5 +65,6 @@ export function buildExtensions(
     Placeholder.configure({ placeholder: 'Start writing…' }),
     Suggestions.configure({ onAlertClick }),
     Originality.configure({ onClick: onOverlapClick }),
+    Hemingway,
   ]
 }

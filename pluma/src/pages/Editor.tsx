@@ -4,6 +4,7 @@ import { EditorContent, useEditor, type Editor as TTEditor } from '@tiptap/react
 import { buildExtensions } from '../editor/extensions'
 import { alertRange, docText, suggestionsKey } from '../editor/suggestions-plugin'
 import { originalityKey, overlapRange } from '../editor/originality-plugin'
+import { hemingwayKey, type RangedMark } from '../editor/hemingway-plugin'
 import { check, checkAsync, fingerprint } from '../engine/checker'
 import { addPersonalWord, getPersonalWords } from '../engine/personal'
 import { DIALECT_LABELS, type Alert, type Dialect } from '../engine/types'
@@ -14,7 +15,7 @@ import {
   type Source,
 } from '../engine/originality'
 import { findSources } from '../engine/source-finder'
-import { analyzeText, type WritingAnalytics } from '../engine/analytics'
+import { analyzeText, analyzeTone, hemingwayMarks, type WritingAnalytics, type ToneScore } from '../engine/analytics'
 import { DEFAULT_GOALS, type WritingGoals } from '../engine/goals'
 import { getDoc, updateDoc, saveEditorState, touchDoc, type EditorState } from '../store/documents'
 import { exportDocx } from '../files/docx-export'
@@ -33,6 +34,10 @@ export default function EditorPage() {
   const [activeId, setActiveId] = useState<string | null>(null)
   const [counts, setCounts] = useState({ words: 0, chars: 0 })
   const [analytics, setAnalytics] = useState<WritingAnalytics | null>(null)
+  const [tone, setTone] = useState<ToneScore | null>(null)
+  const [clarityOn, setClarityOn] = useState(false)
+  const clarityRef = useRef(clarityOn)
+  clarityRef.current = clarityOn
   const [notice, setNotice] = useState<string | null>(null)
   const [goals, setGoals] = useState<WritingGoals>(stored.current?.goals ?? DEFAULT_GOALS)
   const [goalsOpen, setGoalsOpen] = useState(false)
@@ -94,6 +99,26 @@ export default function EditorPage() {
     )
   }, [])
 
+  // Hemingway clarity highlights — mapped to current doc positions, dispatched
+  // to the decoration plugin. Clearing (on=false) wipes the marks.
+  const renderClarity = useCallback((on: boolean) => {
+    const editor = editorRef.current
+    if (!editor) return
+    if (!on) {
+      editor.view.dispatch(editor.state.tr.setMeta(hemingwayKey, { type: 'set', items: [] }))
+      return
+    }
+    const { text, toPm } = docText(editor.state.doc)
+    const items = hemingwayMarks(text)
+      .map((mk): RangedMark | null => {
+        const from = toPm(mk.begin)
+        const to = toPm(mk.end)
+        return from !== null && to !== null && from < to ? { kind: mk.kind, from, to } : null
+      })
+      .filter((x): x is RangedMark => x !== null)
+    editor.view.dispatch(editor.state.tr.setMeta(hemingwayKey, { type: 'set', items }))
+  }, [])
+
   const runCheck = useCallback(() => {
     const editor = editorRef.current
     if (!editor) return
@@ -102,13 +127,23 @@ export default function EditorPage() {
       words: text.trim() ? text.trim().split(/\s+/).length : 0,
       chars: text.replace(/\n/g, '').length,
     })
-    setAnalytics(text.trim().split(/\s+/).length >= 30 ? analyzeText(text) : null)
+    const enoughForStats = text.trim().split(/\s+/).length >= 30
+    setAnalytics(enoughForStats ? analyzeText(text) : null)
+    setTone(enoughForStats ? analyzeTone(text) : null)
+    if (clarityRef.current) renderClarity(true)
     // instant rules-only pass, then the richer worker pass (rules + dictionary)
     renderAlerts(text, check(text, dialectRef.current, goalsRef.current))
     checkAsync(text, dialectRef.current, personalRef.current, goalsRef.current).then((alerts) =>
       renderAlerts(text, alerts),
     )
-  }, [renderAlerts])
+  }, [renderAlerts, renderClarity])
+
+  const toggleClarity = () => {
+    const next = !clarityRef.current
+    setClarityOn(next)
+    clarityRef.current = next
+    renderClarity(next)
+  }
 
   const runOriginality = useCallback((): OverlapMatch[] => {
     const editor = editorRef.current
@@ -583,6 +618,41 @@ export default function EditorPage() {
                   <span className="an-dim"> · {analytics.readingMinutes < 1 ? '< 1' : analytics.readingMinutes} min read</span>
                 </span>
               </div>
+            </div>
+          )}
+
+          {tone && (
+            <div className="tone-block">
+              <div className="tone-head">
+                <span className="an-label">Tone</span>
+                <span className="tone-label">{tone.label}</span>
+              </div>
+              {([
+                ['Formal', tone.formal],
+                ['Confident', tone.confident],
+                ['Friendly', tone.friendly],
+                ['Analytical', tone.analytical],
+                ['Tentative', tone.tentative],
+              ] as [string, number][]).map(([name, val]) => (
+                <div key={name} className="tone-row">
+                  <span className="tone-name">{name}</span>
+                  <span className="tone-bar-wrap"><span className="tone-bar" style={{ width: `${Math.round(val * 100)}%` }} /></span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button className={`clarity-toggle${clarityOn ? ' on' : ''}`} onClick={toggleClarity}>
+            {clarityOn ? '✓ Clarity highlights on' : 'Show clarity highlights'}
+          </button>
+          {clarityOn && (
+            <div className="clarity-legend">
+              <span><i className="pl-hem--very-hard" /> very hard</span>
+              <span><i className="pl-hem--hard" /> hard</span>
+              <span><i className="pl-hem--passive" /> passive</span>
+              <span><i className="pl-hem--adverb" /> adverb</span>
+              <span><i className="pl-hem--weakener" /> weakener</span>
+              <span><i className="pl-hem--complex-word" /> complex</span>
             </div>
           )}
 
