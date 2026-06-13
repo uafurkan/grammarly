@@ -483,6 +483,51 @@ select.dialect {
 
 .compare-btn { width: 100%; justify-content: center; margin-bottom: 14px; }
 
+/* ---------- writing goals modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(38, 36, 31, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 20px;
+}
+.modal-card {
+  position: relative;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 460px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 24px 26px 26px;
+}
+.modal-top { display: flex; align-items: center; justify-content: space-between; }
+.modal-card h2 { font-size: 19px; margin: 0; }
+.modal-card .panel-close { position: static; font-size: 26px; }
+.modal-card .sub { color: var(--muted); font-size: 13px; margin: 6px 0 18px; line-height: 1.5; }
+.goal-row { margin-bottom: 18px; }
+.goal-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.goal-title { font-weight: 600; font-size: 14px; }
+.goal-hint { color: var(--faint); font-size: 12px; }
+.goal-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.goal-chip {
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+.goal-chip:hover { border-color: var(--faint); color: var(--ink); }
+.goal-chip.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
+
 .src-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .src-row {
   display: flex;

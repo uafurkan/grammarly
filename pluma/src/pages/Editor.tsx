@@ -15,10 +15,12 @@ import {
 } from '../engine/originality'
 import { findSources } from '../engine/source-finder'
 import { analyzeText, type WritingAnalytics } from '../engine/analytics'
+import { DEFAULT_GOALS, type WritingGoals } from '../engine/goals'
 import { getDoc, updateDoc, saveEditorState, touchDoc, type EditorState } from '../store/documents'
 import { exportDocx } from '../files/docx-export'
 import SuggestionCard from '../components/SuggestionCard'
 import OriginalityPanel from '../components/OriginalityPanel'
+import GoalsModal from '../components/GoalsModal'
 
 export default function EditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -32,6 +34,10 @@ export default function EditorPage() {
   const [counts, setCounts] = useState({ words: 0, chars: 0 })
   const [analytics, setAnalytics] = useState<WritingAnalytics | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [goals, setGoals] = useState<WritingGoals>(stored.current?.goals ?? DEFAULT_GOALS)
+  const [goalsOpen, setGoalsOpen] = useState(false)
+  const goalsRef = useRef(goals)
+  goalsRef.current = goals
 
   const savedState = stored.current?.editorState
   const [panel, setPanel] = useState<'grammar' | 'originality'>(savedState?.panelTab ?? 'grammar')
@@ -98,8 +104,8 @@ export default function EditorPage() {
     })
     setAnalytics(text.trim().split(/\s+/).length >= 30 ? analyzeText(text) : null)
     // instant rules-only pass, then the richer worker pass (rules + dictionary)
-    renderAlerts(text, check(text, dialectRef.current))
-    checkAsync(text, dialectRef.current, personalRef.current).then((alerts) =>
+    renderAlerts(text, check(text, dialectRef.current, goalsRef.current))
+    checkAsync(text, dialectRef.current, personalRef.current, goalsRef.current).then((alerts) =>
       renderAlerts(text, alerts),
     )
   }, [renderAlerts])
@@ -169,9 +175,17 @@ export default function EditorPage() {
       content: editor.getJSON(),
       words: text.trim() ? text.trim().split(/\s+/).length : 0,
       sources: sourcesRef.current,
+      goals: goalsRef.current,
       editorState: collectEditorState(),
     })
   }, [id, collectEditorState])
+
+  const changeGoals = (g: WritingGoals) => {
+    setGoals(g)
+    goalsRef.current = g
+    if (id) updateDoc(id, { goals: g })
+    runCheck()
+  }
 
   const scheduleSave = useCallback(() => {
     if (!id) return
@@ -462,6 +476,7 @@ export default function EditorPage() {
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
+        <button className="btn" onClick={() => setGoalsOpen(true)} title="Set who you're writing for">⌖ Goals</button>
         <button className="btn" onClick={() => window.print()}>Export PDF</button>
         <button className="btn" onClick={onExport}>Export .docx</button>
         <button
@@ -471,6 +486,10 @@ export default function EditorPage() {
           {alerts.length > 0 ? `Review (${alerts.length})` : 'Review'}
         </button>
       </div>
+
+      {goalsOpen && (
+        <GoalsModal goals={goals} onSave={changeGoals} onClose={() => setGoalsOpen(false)} />
+      )}
 
       <Toolbar editor={editor} counts={counts} />
 

@@ -1,5 +1,6 @@
 import type { Dialect } from '../engine/types'
 import type { Source } from '../engine/originality'
+import type { WritingGoals } from '../engine/goals'
 
 export type DocKind = 'text' | 'sheet' | 'pdf'
 
@@ -34,6 +35,8 @@ export interface StoredDoc extends DocMeta {
   content: unknown
   /** reference sources for the originality self-check (text documents) */
   sources?: Source[]
+  /** writing goals (audience/formality/domain/intent) that tune which alerts show */
+  goals?: WritingGoals
   /** restore-where-you-left-off state */
   editorState?: EditorState
   /** last time the document was opened (for "continue" / recents) */

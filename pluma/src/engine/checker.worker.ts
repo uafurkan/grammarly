@@ -4,6 +4,7 @@
 import type { Alert, Dialect, RuleMatch } from './types'
 import { langOf } from './types'
 import { runRules, resolveOverlaps } from './run'
+import { policyFor, type WritingGoals } from './goals'
 import { getSpeller } from './spell'
 import { spellcheck } from './spellcheck'
 
@@ -12,15 +13,17 @@ interface Req {
   text: string
   dialect: Dialect
   personal: string[]
+  goals?: WritingGoals
 }
 
 let counter = 0
 
 self.onmessage = async (e: MessageEvent<Req>) => {
-  const { reqId, text, dialect, personal } = e.data
+  const { reqId, text, dialect, personal, goals } = e.data
+  const policy = goals ? policyFor(goals) : undefined
   let alerts: Alert[] = []
   try {
-    const ruleMatches: (RuleMatch & { ruleId: string })[] = runRules(text, dialect)
+    const ruleMatches: (RuleMatch & { ruleId: string })[] = runRules(text, dialect, policy)
 
     let spellMatches: (RuleMatch & { ruleId: string })[] = []
     try {
@@ -35,7 +38,7 @@ self.onmessage = async (e: MessageEvent<Req>) => {
       // dictionary unavailable → rules only
     }
 
-    alerts = resolveOverlaps([...ruleMatches, ...spellMatches])
+    alerts = resolveOverlaps([...ruleMatches, ...spellMatches], policy)
   } catch {
     alerts = []
   }

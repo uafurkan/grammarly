@@ -4,10 +4,12 @@
 
 import type { Alert, Dialect } from './types'
 import { runRules, resolveOverlaps } from './run'
+import { policyFor, type WritingGoals } from './goals'
 
 /** Synchronous, rules-only check (no dictionary). Used as instant fallback. */
-export function check(text: string, dialect: Dialect): Alert[] {
-  return resolveOverlaps(runRules(text, dialect))
+export function check(text: string, dialect: Dialect, goals?: WritingGoals): Alert[] {
+  const policy = goals ? policyFor(goals) : undefined
+  return resolveOverlaps(runRules(text, dialect, policy), policy)
 }
 
 // --- Worker-backed async check (rules + dictionary spell-check) ------------
@@ -48,13 +50,18 @@ function getWorker(): Worker | null {
  * Full check: rules + dictionary spell-check, off the main thread. Falls back
  * to the synchronous rules-only check if a worker isn't available.
  */
-export function checkAsync(text: string, dialect: Dialect, personal: string[] = []): Promise<Alert[]> {
+export function checkAsync(
+  text: string,
+  dialect: Dialect,
+  personal: string[] = [],
+  goals?: WritingGoals,
+): Promise<Alert[]> {
   const w = getWorker()
-  if (!w) return Promise.resolve(check(text, dialect))
+  if (!w) return Promise.resolve(check(text, dialect, goals))
   const reqId = ++reqSeq
   return new Promise<Alert[]>((resolve) => {
     pending.set(reqId, { resolve })
-    w.postMessage({ reqId, text, dialect, personal })
+    w.postMessage({ reqId, text, dialect, personal, goals })
   })
 }
 
