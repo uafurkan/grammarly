@@ -26,6 +26,8 @@ import OriginalityPanel from '../components/OriginalityPanel'
 import GoalsModal from '../components/GoalsModal'
 import WordPopover from '../components/WordPopover'
 import BibliographyPanel from '../components/BibliographyPanel'
+import AssistPanel from '../ai/AssistPanel'
+import { isAiAvailable } from '../ai/capabilities'
 import { fromFoundSource, type Reference } from '../engine/citations'
 
 export default function EditorPage() {
@@ -55,7 +57,9 @@ export default function EditorPage() {
   const acCtrl = useRef<AbortController | null>(null)
 
   const savedState = stored.current?.editorState
-  const [panel, setPanel] = useState<'grammar' | 'originality' | 'citations'>(savedState?.panelTab ?? 'grammar')
+  const [panel, setPanel] = useState<'grammar' | 'originality' | 'citations' | 'assist'>(savedState?.panelTab ?? 'grammar')
+  const [selText, setSelText] = useState('')
+  const aiOn = isAiAvailable()
   const [sources, setSources] = useState<Source[]>(stored.current?.sources ?? [])
   const [references, setReferences] = useState<Reference[]>(stored.current?.references ?? [])
   const referencesRef = useRef(references)
@@ -290,6 +294,28 @@ export default function EditorPage() {
     scheduleSave()
   }
 
+  // replace the current selection with AI output (rewrite/tone/etc.)
+  const aiReplace = (text: string) => {
+    const ed = editorRef.current
+    if (!ed) return
+    const { from, to } = ed.state.selection
+    if (from === to) return
+    ed.chain().focus().insertContentAt({ from, to }, text).run()
+    runCheck()
+    scheduleSave()
+  }
+
+  // drop AI output as a new paragraph just after the selection (summaries, etc.)
+  const aiInsertBelow = (text: string) => {
+    const ed = editorRef.current
+    if (!ed) return
+    const { to } = ed.state.selection
+    const block = text.split('\n').map((line) => ({ type: 'paragraph', content: line ? [{ type: 'text', text: line }] : [] }))
+    ed.chain().focus().insertContentAt(to, block).run()
+    runCheck()
+    scheduleSave()
+  }
+
   const changeGoals = (g: WritingGoals) => {
     setGoals(g)
     goalsRef.current = g
@@ -363,6 +389,10 @@ export default function EditorPage() {
       scheduleCheck()
       scheduleSave()
       scheduleAutocomplete()
+    },
+    onSelectionUpdate: ({ editor: ed }) => {
+      const { from, to } = ed.state.selection
+      setSelText(from === to ? '' : ed.state.doc.textBetween(from, to, ' '))
     },
   })
 
@@ -674,9 +704,24 @@ export default function EditorPage() {
             >
               Citations{references.length > 0 ? ` (${references.length})` : ''}
             </button>
+            {aiOn && (
+              <button
+                className={panel === 'assist' ? 'on' : ''}
+                onClick={() => setPanel('assist')}
+              >
+                ✦ Assist
+              </button>
+            )}
           </div>
 
-          {panel === 'citations' ? (
+          {panel === 'assist' ? (
+            <AssistPanel
+              selectedText={selText}
+              context={{ goals, dialect }}
+              onReplace={aiReplace}
+              onInsert={aiInsertBelow}
+            />
+          ) : panel === 'citations' ? (
             <BibliographyPanel
               references={references}
               onRemove={removeReference}

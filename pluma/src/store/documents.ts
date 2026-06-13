@@ -21,7 +21,7 @@ export interface EditorState {
   /** scroll offset of the editing surface */
   scrollTop?: number
   panelOpen?: boolean
-  panelTab?: 'grammar' | 'originality' | 'citations'
+  panelTab?: 'grammar' | 'originality' | 'citations' | 'assist'
   /** dismissed suggestion fingerprints (engine/checker fingerprint()) */
   dismissed?: string[]
   /** spreadsheet: active cell + visible sheet tab */

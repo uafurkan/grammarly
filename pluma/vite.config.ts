@@ -3,6 +3,15 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // web-llm is large and only loaded on opt-in; keep it out of the main bundle
+  optimizeDeps: { exclude: ['@mlc-ai/web-llm'] },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: { 'web-llm': ['@mlc-ai/web-llm'] },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({
@@ -22,10 +31,13 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // app shell (incl. the large main bundle) is precached; big static
-        // assets and the model/CDN traffic are handled at runtime instead.
+        // app shell (incl. the main bundle) is precached; the on-device AI
+        // chunks are opt-in (loaded only when the user downloads the model) so
+        // they must NOT be precached, and big static assets / CDN traffic are
+        // handled at runtime instead.
         globPatterns: ['**/*.{js,css,html,svg,woff2}'],
-        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        globIgnores: ['**/web-llm-*.js', '**/ai.worker-*.js'],
+        maximumFileSizeToCacheInBytes: 3.5 * 1024 * 1024,
         navigateFallback: 'index.html',
         runtimeCaching: [
           {

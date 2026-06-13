@@ -627,6 +627,42 @@ select.dialect {
 .cite-actions { display: flex; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
 .cite-actions .btn { padding: 4px 10px; font-size: 12px; }
 
+/* ---------- on-device AI (Assist) ---------- */
+.ai-model-choice { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 4px; }
+.ai-model-opt {
+  display: flex; align-items: center; justify-content: space-between;
+  border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: 8px; padding: 11px 14px; cursor: pointer; text-align: left;
+}
+.ai-model-opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.ai-model-name { font-size: 13.5px; }
+.ai-model-size { font-size: 12px; color: var(--muted); }
+.ai-load { margin-top: 12px; }
+.ai-progress-wrap { height: 8px; background: var(--rule); border-radius: 5px; overflow: hidden; }
+.ai-progress { height: 100%; background: var(--accent); border-radius: 5px; transition: width 200ms ease; }
+
+.ai-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.ai-act {
+  border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: 6px; padding: 7px 12px; font-size: 13px; cursor: pointer;
+}
+.ai-act:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.ai-act:disabled { opacity: 0.45; cursor: default; }
+.ai-tone-row { margin-bottom: 12px; }
+.ai-tones { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.ai-tone {
+  border: 1px solid var(--rule); background: var(--paper); color: var(--muted);
+  border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; text-transform: capitalize;
+}
+.ai-tone:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.ai-tone:disabled { opacity: 0.45; cursor: default; }
+.ai-output { border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; background: var(--paper); }
+.ai-output-text { font-size: 13.5px; line-height: 1.55; white-space: pre-wrap; color: var(--ink); }
+.ai-caret { color: var(--accent); animation: ai-blink 1s step-start infinite; }
+@keyframes ai-blink { 50% { opacity: 0; } }
+.ai-output-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.ai-output-actions .btn { padding: 6px 12px; font-size: 12.5px; }
+
 .src-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .src-row {
   display: flex;
