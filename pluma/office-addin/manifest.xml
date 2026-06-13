@@ -7,7 +7,7 @@
   xsi:type="TaskPaneApp">
 
   <Id>b6a9c2e4-3f1a-4d8b-9c7e-1a2b3c4d5e6f</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.1.0</Version>
   <ProviderName>Pluma</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Pluma" />
