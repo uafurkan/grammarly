@@ -27,3 +27,44 @@
 .office-summary { margin: 12px 0 6px; }
 .office-list { margin-top: 8px; }
 .office-hint { color: var(--muted); font-size: 13px; line-height: 1.55; margin-top: 18px; }
+
+/* live toggle */
+.office-controls { display: flex; align-items: center; margin: 10px 0 4px; }
+.office-live { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.office-live input { position: absolute; opacity: 0; width: 0; height: 0; }
+.office-live-track {
+  width: 32px; height: 18px; border-radius: 999px; background: var(--rule);
+  position: relative; transition: background 0.18s; flex: 0 0 auto;
+}
+.office-live-thumb {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.25); transition: transform 0.18s;
+}
+.office-live input:checked + .office-live-track { background: var(--accent); }
+.office-live input:checked + .office-live-track .office-live-thumb { transform: translateX(14px); }
+.office-live input:focus-visible + .office-live-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.office-live-text { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.office-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); transition: background 0.2s; }
+.office-live-dot.on { background: var(--accent); animation: office-pulse 1s ease-in-out infinite; }
+@keyframes office-pulse { 0%, 100% { opacity: 0.35 } 50% { opacity: 1 } }
+
+/* category tabs */
+.office-tabs {
+  display: flex; gap: 4px; background: var(--accent-soft); border-radius: 9px;
+  padding: 3px; margin: 10px 0 4px;
+}
+.office-tab {
+  flex: 1; border: 0; background: transparent; color: var(--muted);
+  border-radius: 7px; padding: 7px 6px; font-size: 12.5px; font-weight: 500; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  white-space: nowrap; transition: background 0.15s, color 0.15s;
+}
+.office-tab:hover:not(:disabled) { color: var(--ink); }
+.office-tab:disabled { opacity: 0.45; cursor: default; }
+.office-tab.on { background: var(--paper); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.office-tab-n {
+  font-size: 11px; font-weight: 600; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; background: var(--rule); color: var(--muted);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.office-tab.on .office-tab-n { background: var(--accent-soft); color: var(--accent); }
