@@ -73,6 +73,7 @@ export default function PdfEditor() {
   const [sources, setSources] = useState<Source[]>(meta.current?.sources ?? [])
   const [overlaps, setOverlaps] = useState<PdfOverlap[]>([])
   const [activeOverlap, setActiveOverlap] = useState<string | null>(null)
+  const [origPhase, setOrigPhase] = useState<'idle' | 'comparing' | 'done'>('idle')
   const [fit, setFit] = useState(1)
 
   const bytesRef = useRef<ArrayBuffer | null>(null)
@@ -83,6 +84,7 @@ export default function PdfEditor() {
   const swipeStartY = useRef(0)
   const sourcesRef = useRef(sources)
   sourcesRef.current = sources
+  const overlapsRef = useRef<PdfOverlap[]>([])
   const loadedRef = useRef(false)
 
   // persist accepted corrections so they survive closing/reopening the PDF
@@ -149,7 +151,11 @@ export default function PdfEditor() {
         loadedRef.current = true
         touchDoc(id)
         void runCheck(rendered, dialect)
-        if (sourcesRef.current.length > 0) runOriginality()
+        // the PDF text is fixed, so if sources were saved, show their comparison right away
+        if (sourcesRef.current.length > 0) {
+          runOriginality()
+          setOrigPhase('done')
+        }
       } catch (e) {
         if (cancelled) return
         setErrorMsg(e instanceof Error ? e.message : 'Could not open this PDF.')
@@ -212,13 +218,13 @@ export default function PdfEditor() {
     return { combined, pageStart }
   }, [])
 
-  const runOriginality = useCallback(() => {
+  const runOriginality = useCallback((): OverlapMatch[] => {
     const rendered = pagesRef.current
     if (rendered.length === 0 || sourcesRef.current.length === 0) {
       setOverlaps([])
       setOrigMatches([])
       setOrigScore({ overlapPercent: 0, verbatim: 0, paraphrase: 0 })
-      return
+      return []
     }
     const { combined, pageStart } = combinedText()
     const matches = checkOriginality(combined, sourcesRef.current)
@@ -248,10 +254,42 @@ export default function PdfEditor() {
         }
       }
     }
+    overlapsRef.current = rects
     setOverlaps(rects)
     setOrigMatches(matches)
     setOrigScore(scoreOriginality(combined, matches))
+    return matches
   }, [combinedText])
+
+  const scrollToOverlap = (matchId: string) => {
+    const first = overlapsRef.current.find((o) => o.matchId === matchId)
+    if (first) {
+      document
+        .querySelectorAll('.pdf-page-fit')
+        [first.pageIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }
+
+  // explicit "Compare" action — runs the check, shows the result, jumps to the first overlap
+  const compareNow = useCallback(() => {
+    if (sourcesRef.current.length === 0) return
+    setOrigPhase('comparing')
+    window.setTimeout(() => {
+      const matches = runOriginality()
+      setOrigPhase('done')
+      if (matches.length > 0) {
+        setActiveOverlap(matches[0].id)
+        scrollToOverlap(matches[0].id)
+      }
+    }, 30)
+  }, [runOriginality])
+
+  const markOrigStale = () => {
+    setOrigPhase('idle')
+    setOverlaps([])
+    setOrigMatches([])
+    setActiveOverlap(null)
+  }
 
   const addSource = (label: string, text: string) => {
     const next = [
@@ -261,7 +299,7 @@ export default function PdfEditor() {
     setSources(next)
     sourcesRef.current = next
     if (id) updateDoc(id, { sources: next })
-    runOriginality()
+    markOrigStale()
   }
 
   const removeSource = (sid: string) => {
@@ -269,17 +307,12 @@ export default function PdfEditor() {
     setSources(next)
     sourcesRef.current = next
     if (id) updateDoc(id, { sources: next })
-    runOriginality()
+    markOrigStale()
   }
 
   const jumpToOverlap = (matchId: string) => {
     setActiveOverlap(matchId)
-    const first = overlaps.find((o) => o.matchId === matchId)
-    if (first) {
-      document
-        .querySelectorAll('.pdf-page-fit')
-        [first.pageIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    }
+    scrollToOverlap(matchId)
   }
 
   // scale each page to fit the scroll container's width (no horizontal overflow on mobile)
@@ -474,9 +507,9 @@ export default function PdfEditor() {
             </button>
             <button
               className={panel === 'originality' ? 'on' : ''}
-              onClick={() => { setPanel('originality'); runOriginality() }}
+              onClick={() => setPanel('originality')}
             >
-              Originality{origMatches.length > 0 ? ` (${origMatches.length})` : ''}
+              Originality{origPhase === 'done' && origMatches.length > 0 ? ` (${origMatches.length})` : ''}
             </button>
           </div>
 
@@ -486,6 +519,8 @@ export default function PdfEditor() {
               overlaps={origMatches}
               score={origScore}
               activeId={activeOverlap}
+              phase={origPhase}
+              onCompare={compareNow}
               onAdd={addSource}
               onRemove={removeSource}
               onJump={(mid) => jumpToOverlap(mid)}

@@ -38,6 +38,8 @@ export default function EditorPage() {
   const [sources, setSources] = useState<Source[]>(stored.current?.sources ?? [])
   const [overlaps, setOverlaps] = useState<OverlapMatch[]>([])
   const [activeOverlap, setActiveOverlap] = useState<string | null>(null)
+  const [origPhase, setOrigPhase] = useState<'idle' | 'comparing' | 'done'>('idle')
+  const origPhaseRef = useRef(origPhase)
   const [panelOpen, setPanelOpen] = useState(savedState?.panelOpen ?? false)
 
   const editorRef = useRef<TTEditor | null>(null)
@@ -102,9 +104,9 @@ export default function EditorPage() {
     )
   }, [renderAlerts])
 
-  const runOriginality = useCallback(() => {
+  const runOriginality = useCallback((): OverlapMatch[] => {
     const editor = editorRef.current
-    if (!editor) return
+    if (!editor) return []
     const { text, toPm } = docText(editor.state.doc)
     const found = checkOriginality(text, sourcesRef.current)
 
@@ -121,13 +123,27 @@ export default function EditorPage() {
     editor.view.dispatch(
       editor.state.tr.setMeta(originalityKey, { type: 'set', items, activeId: null }),
     )
+    return found
+  }, [])
+
+  // sources changed → previous comparison is stale; clear highlights, require a fresh Compare
+  const markOrigStale = useCallback(() => {
+    setOrigPhase('idle')
+    origPhaseRef.current = 'idle'
+    setOverlaps([])
+    setActiveOverlap(null)
+    const editor = editorRef.current
+    editor?.view.dispatch(
+      editor.state.tr.setMeta(originalityKey, { type: 'set', items: [], activeId: null }),
+    )
   }, [])
 
   const scheduleCheck = useCallback(() => {
     window.clearTimeout(checkTimer.current)
     checkTimer.current = window.setTimeout(() => {
       runCheck()
-      if (sourcesRef.current.length > 0) runOriginality()
+      // keep overlap highlights aligned as the user edits, but only once they've compared
+      if (sourcesRef.current.length > 0 && origPhaseRef.current === 'done') runOriginality()
     }, 500)
   }, [runCheck, runOriginality])
 
@@ -191,6 +207,19 @@ export default function EditorPage() {
       if (range) editor.chain().focus().setTextSelection(range.from).scrollIntoView().run()
     }
   }, [])
+
+  // explicit "Compare" action — runs the check, shows the result, jumps to the first overlap
+  const compareNow = useCallback(() => {
+    if (sourcesRef.current.length === 0) return
+    setOrigPhase('comparing')
+    origPhaseRef.current = 'comparing'
+    window.setTimeout(() => {
+      const found = runOriginality()
+      setOrigPhase('done')
+      origPhaseRef.current = 'done'
+      if (found.length > 0) setActiveOverlapHl(found[0].id, true)
+    }, 30)
+  }, [runOriginality, setActiveOverlapHl])
 
   const editor = useEditor({
     extensions: buildExtensions(
@@ -346,7 +375,7 @@ export default function EditorPage() {
     const next = [...sourcesRef.current, { id: crypto.randomUUID(), label: label.trim() || `Source ${sourcesRef.current.length + 1}`, text }]
     setSources(next)
     sourcesRef.current = next
-    runOriginality()
+    markOrigStale()
     scheduleSave()
   }
 
@@ -354,7 +383,7 @@ export default function EditorPage() {
     const next = sourcesRef.current.filter((s) => s.id !== sid)
     setSources(next)
     sourcesRef.current = next
-    runOriginality()
+    markOrigStale()
     scheduleSave()
   }
 
@@ -463,12 +492,9 @@ export default function EditorPage() {
             </button>
             <button
               className={panel === 'originality' ? 'on' : ''}
-              onClick={() => {
-                setPanel('originality')
-                runOriginality()
-              }}
+              onClick={() => setPanel('originality')}
             >
-              Originality{overlaps.length > 0 ? ` (${overlaps.length})` : ''}
+              Originality{origPhase === 'done' && overlaps.length > 0 ? ` (${overlaps.length})` : ''}
             </button>
           </div>
 
@@ -478,6 +504,8 @@ export default function EditorPage() {
               overlaps={overlaps}
               score={scoreOriginality(docText(editor.state.doc).text, overlaps)}
               activeId={activeOverlap}
+              phase={origPhase}
+              onCompare={compareNow}
               onAdd={addSource}
               onRemove={removeSource}
               onJump={(id) => setActiveOverlapHl(id, true)}

@@ -17,6 +17,8 @@ export default function OriginalityPanel({
   overlaps,
   score,
   activeId,
+  phase,
+  onCompare,
   onAdd,
   onRemove,
   onJump,
@@ -29,6 +31,9 @@ export default function OriginalityPanel({
   overlaps: OverlapMatch[]
   score: { overlapPercent: number; verbatim: number; paraphrase: number }
   activeId: string | null
+  /** comparison lifecycle: 'idle' = sources changed, results stale; 'comparing' = running; 'done' = fresh results shown */
+  phase: 'idle' | 'comparing' | 'done'
+  onCompare: () => void
   onAdd: (label: string, text: string) => void
   onRemove: (id: string) => void
   onJump: (id: string) => void
@@ -76,16 +81,6 @@ export default function OriginalityPanel({
         Compares your writing against sources you add — verbatim and paraphrased —
         so you can quote or cite them. A self-check, not a verdict.
       </p>
-
-      {sources.length > 0 && (
-        <div className="orig-score">
-          <span className="pct">{score.overlapPercent}%</span>
-          <span className="lbl">
-            of your text overlaps your sources<br />
-            {score.verbatim} verbatim · {score.paraphrase} paraphrased
-          </span>
-        </div>
-      )}
 
       <div className="src-list">
         {sources.map((s) => (
@@ -235,7 +230,7 @@ export default function OriginalityPanel({
                     setAddedIds((prev) => new Set(prev).add(s.id))
                   }}
                 >
-                  {addedIds.has(s.id) ? '✓ Added & comparing' : 'Add as source & compare'}
+                  {addedIds.has(s.id) ? '✓ Added — press Compare' : 'Add as source'}
                 </button>
               </div>
             ))}
@@ -246,8 +241,38 @@ export default function OriginalityPanel({
 
       <div style={{ height: 18 }} />
 
+      {sources.length > 0 && (
+        <button
+          className="btn btn--primary compare-btn"
+          onClick={onCompare}
+          disabled={phase === 'comparing'}
+        >
+          {phase === 'comparing'
+            ? 'Comparing…'
+            : phase === 'done'
+            ? '↻ Compare again'
+            : `Compare against ${sources.length === 1 ? 'this source' : `${sources.length} sources`} →`}
+        </button>
+      )}
+
+      {phase === 'done' && sources.length > 0 && (
+        <div className="orig-score">
+          <span className="pct">{score.overlapPercent}%</span>
+          <span className="lbl">
+            of your text overlaps your sources<br />
+            {score.verbatim} verbatim · {score.paraphrase} paraphrased
+          </span>
+        </div>
+      )}
+
       {sources.length === 0 ? (
-        <div className="clean">Add the sources you used and Pluma will show where your draft overlaps them.</div>
+        <div className="clean">Add the sources you used, then press Compare to see where your draft overlaps them.</div>
+      ) : phase !== 'done' ? (
+        <div className="clean">
+          {phase === 'comparing'
+            ? 'Comparing your draft against your sources…'
+            : 'Ready. Press “Compare” above to check your draft against these sources.'}
+        </div>
       ) : overlaps.length === 0 ? (
         <div className="clean">
           <span className="mark">✓</span>
