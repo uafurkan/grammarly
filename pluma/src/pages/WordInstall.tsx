@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import WordGuide from '../components/WordGuide'
 
 type Platform = 'windows' | 'mac' | 'web'
 
@@ -66,6 +67,7 @@ const GUIDES: Record<Platform, Guide> = {
 export default function WordInstall() {
   const [tab, setTab] = useState<Platform>(detectPlatform)
   const [showVersion, setShowVersion] = useState(false)
+  const [guide, setGuide] = useState(false)
   const g = GUIDES[tab]
 
   return (
@@ -90,9 +92,9 @@ export default function WordInstall() {
             <a className="btn btn--primary install-download" href="/pluma-word.xml" download="pluma-word.xml">
               ↓ Download the add-in
             </a>
-            <a className="btn" href="https://word.new" target="_blank" rel="noreferrer">
-              Open Word on the web →
-            </a>
+            <button className="btn" onClick={() => setGuide(true)}>
+              ▶ Watch how to install
+            </button>
           </div>
           <p className="install-fine">
             You’ll get a small <code>pluma-word.xml</code> file — it just tells Word
@@ -166,6 +168,8 @@ export default function WordInstall() {
       </main>
 
       <footer className="install-footer">Pluma · writing assistant for students · documents stay in your browser</footer>
+
+      {guide && <WordGuide onClose={() => setGuide(false)} />}
     </div>
   )
 }
