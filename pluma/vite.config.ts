@@ -21,6 +21,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Register the service worker manually (in src/main.tsx) so it is scoped to
+      // the web app only. The Word add-in entry (office.html) must NOT be under a
+      // service worker — otherwise the SPA navigation fallback can serve the site
+      // shell (index.html) inside Word's task pane instead of the add-in.
+      injectRegister: null,
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'Pluma — write clearly, in your own voice',
@@ -46,8 +51,10 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 3.5 * 1024 * 1024,
         navigateFallback: 'index.html',
         // don't let the SPA fallback swallow the add-in manifest download or the
-        // Office task-pane page (Word must receive office.html, not index.html)
-        navigateFallbackDenylist: [/pluma-word\.xml$/, /office\.html$/],
+        // Office task-pane page (Word must receive office.html, not index.html).
+        // No `$` anchor: Office appends a `?_host_Info=...` query to the task-pane
+        // URL, so the path no longer *ends* with office.html — match anywhere.
+        navigateFallbackDenylist: [/\/pluma-word\.xml/, /\/office\.html/],
         runtimeCaching: [
           {
             // pdf.js worker (.mjs) + Hunspell dictionaries — cache on first use
