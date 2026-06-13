@@ -27,6 +27,7 @@ export default function Home() {
       <div className="topbar">
         <Link to="/" className="brand">Plu<em>ma</em></Link>
         <span style={{ flex: 1 }} />
+        <button className="btn btn--quiet" title="How to use Pluma" onClick={() => window.dispatchEvent(new Event('pluma:guide'))}>How it works</button>
         <Link to="/word" className="btn btn--quiet">Pluma for Word</Link>
         <Link to="/docs" className="btn btn--quiet">My documents</Link>
       </div>
