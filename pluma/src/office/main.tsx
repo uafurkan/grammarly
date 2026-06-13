@@ -10,12 +10,23 @@ import './office.css'
 // otherwise its SPA navigation fallback can serve the site shell (the Pluma
 // homepage) inside Word instead of this add-in. Tear down any service worker
 // (and its caches) that a previous build may have registered in Word's webview.
-if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+//
+// Only do this when actually hosted by Office: this page shares an origin with
+// the web app, so running it in a normal browser tab would otherwise wipe the
+// installed PWA's offline cache and unregister its service worker. Office always
+// appends a `_host_Info` query to the task-pane URL, so that's our gate.
+const inOffice =
+  typeof window !== 'undefined' &&
+  (/[?&]_host_Info=/.test(window.location.search) || window.self !== window.top)
+if (inOffice && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
     regs.forEach((r) => r.unregister())
   }).catch(() => { /* ignore */ })
+  // Only Pluma's own caches — never blow away unrelated origin caches.
   if (typeof caches !== 'undefined') {
-    caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => { /* ignore */ })
+    caches.keys()
+      .then((keys) => keys.filter((k) => /^(pluma|workbox|vite-pwa)/i.test(k)).forEach((k) => caches.delete(k)))
+      .catch(() => { /* ignore */ })
   }
 }
 

@@ -35,7 +35,7 @@ export default function BibliographyPanel({
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const addDoi = async () => {
-    if (!doi.trim()) return
+    if (busy || !doi.trim()) return
     setBusy(true)
     setErr(null)
     try {

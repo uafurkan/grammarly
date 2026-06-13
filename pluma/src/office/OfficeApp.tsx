@@ -3,6 +3,7 @@ import { check, checkAsync, fingerprint } from '../engine/checker'
 import { getPersonalWords, addPersonalWord } from '../engine/personal'
 import { analyzeText, analyzeTone, type WritingAnalytics, type ToneScore } from '../engine/analytics'
 import { DIALECT_LABELS, type Alert, type Category, type Dialect } from '../engine/types'
+import { DEFAULT_GOALS } from '../engine/goals'
 import SuggestionCard from '../components/SuggestionCard'
 import { readDocText, applyReplacement, selectOccurrence, occurrenceBefore } from './word'
 
@@ -51,11 +52,14 @@ export default function OfficeApp() {
   const lastTextRef = useRef('')
   const dialectRef = useRef(dialect)
   const dismissedRef = useRef(dismissed)
+  const aliveRef = useRef(true)
+  const holdPollUntil = useRef(0)
 
   useEffect(() => { liveRef.current = live }, [live])
   useEffect(() => { checkedRef.current = checked }, [checked])
   useEffect(() => { dialectRef.current = dialect }, [dialect])
   useEffect(() => { dismissedRef.current = dismissed }, [dismissed])
+  useEffect(() => () => { aliveRef.current = false }, [])
 
   useEffect(() => {
     if (!notice) return
@@ -76,14 +80,21 @@ export default function OfficeApp() {
     try {
       const text = opts.text ?? (await readDocText())
       lastTextRef.current = text
-      setDocText(text)
+      // DEFAULT_GOALS keeps the engine identical to the web app: no clarity rules
+      // are suppressed, but when a long document exceeds the alert cap the
+      // highest-weighted alerts (correctness over style) survive — without a
+      // policy the cap is a positional slice that can hide real grammar errors.
+      const goals = DEFAULT_GOALS
       const personal = getPersonalWords()
+      if (!aliveRef.current) return
+      setDocText(text)
       // On a manual check, paint the instant (sync) pass first so something shows
       // immediately; the live path skips it to avoid a visible flicker.
       if (!opts.silent) {
-        setAlerts(check(text, dialectRef.current).filter((a) => !dismissedRef.current.has(fingerprint(a))))
+        setAlerts(check(text, dialectRef.current, goals).filter((a) => !dismissedRef.current.has(fingerprint(a))))
       }
-      const full = await checkAsync(text, dialectRef.current, personal)
+      const full = await checkAsync(text, dialectRef.current, personal, goals)
+      if (!aliveRef.current) return
       setAlerts(full.filter((a) => !dismissedRef.current.has(fingerprint(a))))
       const enough = text.trim().split(/\s+/).filter(Boolean).length >= 30
       setAnalytics(enough ? analyzeText(text) : null)
@@ -91,11 +102,10 @@ export default function OfficeApp() {
       setChecked(true)
       checkedRef.current = true
     } catch {
-      if (!opts.silent) setNotice('Could not read the document.')
+      if (!opts.silent && aliveRef.current) setNotice('Could not read the document.')
     } finally {
       runningRef.current = false
-      setBusy(false)
-      setLiveBusy(false)
+      if (aliveRef.current) { setBusy(false); setLiveBusy(false) }
     }
   }, [])
 
@@ -104,6 +114,8 @@ export default function OfficeApp() {
   useEffect(() => {
     const id = window.setInterval(async () => {
       if (!liveRef.current || !checkedRef.current || runningRef.current) return
+      // Give a just-applied fix a moment to settle so we don't read mid-insert.
+      if (Date.now() < holdPollUntil.current) return
       let text: string
       try {
         text = await readDocText()
@@ -117,22 +129,38 @@ export default function OfficeApp() {
   }, [performCheck])
 
   // Re-check (quietly) when the dialect changes, but only after the first scan.
+  // Clear lastTextRef so the change is honoured even if a scan is mid-flight
+  // (the text is unchanged, so the poller would otherwise skip it).
   useEffect(() => {
-    if (checkedRef.current) void performCheck({ silent: true })
+    if (!checkedRef.current) return
+    lastTextRef.current = ''
+    void performCheck({ silent: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialect])
 
   const applyFix = async (alert: Alert, index: number) => {
     const replacement = alert.replacements[index]
     if (replacement === undefined) return
-    const occ = occurrenceBefore(docText, alert.text, alert.begin)
     try {
+      // The alert's offset is into the text from the last scan. If the document
+      // has changed since then, that offset is stale and the Nth-occurrence math
+      // could replace the WRONG word — so verify the document is unchanged first.
+      // If it moved, re-scan and ask the user to click again rather than risk it.
+      const live = await readDocText()
+      if (live !== docText) {
+        lastTextRef.current = ''
+        void performCheck({ silent: true })
+        setNotice('The document changed — re-checked. Please click again.')
+        return
+      }
+      const occ = occurrenceBefore(docText, alert.text, alert.begin)
       const ok = await applyReplacement(alert.text, replacement, occ)
       if (!ok) { setNotice('Could not find that text to replace.'); return }
       setAlerts((prev) => prev.filter((a) => a.id !== alert.id))
       if (activeId === alert.id) setActiveId(null)
-      // Let Word settle, then re-scan quietly so the list stays in sync.
-      window.setTimeout(() => void performCheck({ silent: true }), 250)
+      // Hold the poller briefly, then re-scan quietly so the list stays in sync.
+      holdPollUntil.current = Date.now() + 900
+      window.setTimeout(() => void performCheck({ silent: true }), 300)
     } catch {
       setNotice('Could not apply the change.')
     }
