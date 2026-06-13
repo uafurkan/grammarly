@@ -8,7 +8,15 @@ import { getBlob } from '../store/blobs'
 import { loadPdf, renderPage, type RenderedPage } from '../files/pdf-render'
 import { exportCorrectedPdf, type Correction } from '../files/pdf-export'
 import { needsOcr, ocrPage, releaseOcr } from '../files/pdf-ocr'
+import {
+  checkOriginality,
+  scoreOriginality,
+  type OverlapMatch,
+  type Source,
+} from '../engine/originality'
+import { findSources } from '../engine/source-finder'
 import SuggestionCard from '../components/SuggestionCard'
+import OriginalityPanel from '../components/OriginalityPanel'
 
 const MAX_PAGES = 60
 const MAX_OCR_PAGES = 15
@@ -29,6 +37,21 @@ interface Applied {
   fullStr: string
 }
 
+/** an originality overlap anchored to one page text item */
+interface PdfOverlap {
+  id: string
+  matchId: string
+  pageIndex: number
+  kind: 'verbatim' | 'paraphrase'
+  rect: { left: number; top: number; width: number; height: number }
+}
+
+const FONT_STACK: Record<'serif' | 'sans' | 'mono', string> = {
+  serif: 'Georgia, "Times New Roman", Times, serif',
+  sans: 'Helvetica, Arial, sans-serif',
+  mono: '"Courier New", Courier, monospace',
+}
+
 export default function PdfEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -46,8 +69,17 @@ export default function PdfEditor() {
   const [truncated, setTruncated] = useState(false)
   const [ocrStatus, setOcrStatus] = useState<string | null>(null)
 
+  const [panel, setPanel] = useState<'grammar' | 'originality'>('grammar')
+  const [sources, setSources] = useState<Source[]>(meta.current?.sources ?? [])
+  const [overlaps, setOverlaps] = useState<PdfOverlap[]>([])
+  const [activeOverlap, setActiveOverlap] = useState<string | null>(null)
+  const [fit, setFit] = useState(1)
+
   const bytesRef = useRef<ArrayBuffer | null>(null)
   const pagesRef = useRef<RenderedPage[]>([])
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const sourcesRef = useRef(sources)
+  sourcesRef.current = sources
   const loadedRef = useRef(false)
 
   // persist accepted corrections so they survive closing/reopening the PDF
@@ -114,6 +146,7 @@ export default function PdfEditor() {
         loadedRef.current = true
         touchDoc(id)
         void runCheck(rendered, dialect)
+        if (sourcesRef.current.length > 0) runOriginality()
       } catch (e) {
         if (cancelled) return
         setErrorMsg(e instanceof Error ? e.message : 'Could not open this PDF.')
@@ -160,6 +193,105 @@ export default function PdfEditor() {
     }
     setAlerts(all)
   }, [])
+
+  // originality: compare the whole PDF's text against the user's sources
+  const [origScore, setOrigScore] = useState({ overlapPercent: 0, verbatim: 0, paraphrase: 0 })
+  const [origMatches, setOrigMatches] = useState<OverlapMatch[]>([])
+
+  const combinedText = useCallback(() => {
+    let combined = ''
+    const pageStart: number[] = []
+    for (const page of pagesRef.current) {
+      if (combined) combined += '\n'
+      pageStart.push(combined.length)
+      combined += page.text
+    }
+    return { combined, pageStart }
+  }, [])
+
+  const runOriginality = useCallback(() => {
+    const rendered = pagesRef.current
+    if (rendered.length === 0 || sourcesRef.current.length === 0) {
+      setOverlaps([])
+      setOrigMatches([])
+      setOrigScore({ overlapPercent: 0, verbatim: 0, paraphrase: 0 })
+      return
+    }
+    const { combined, pageStart } = combinedText()
+    const matches = checkOriginality(combined, sourcesRef.current)
+    const rects: PdfOverlap[] = []
+    for (const m of matches) {
+      for (let p = 0; p < rendered.length; p++) {
+        const pStart = pageStart[p]
+        const pEnd = pStart + rendered[p].text.length
+        const from = Math.max(m.begin, pStart)
+        const to = Math.min(m.end, pEnd)
+        if (from >= to) continue
+        const localFrom = from - pStart
+        const localTo = to - pStart
+        const page = rendered[p]
+        for (let i = 0; i < page.items.length; i++) {
+          const itemStart = page.offsets[i]
+          const item = page.items[i]
+          const itemEnd = itemStart + item.str.length
+          if (itemEnd <= localFrom || itemStart >= localTo) continue
+          rects.push({
+            id: `${m.id}:${p}:${i}`,
+            matchId: m.id,
+            pageIndex: p,
+            kind: m.kind,
+            rect: { left: item.left, top: item.top, width: item.width, height: item.height },
+          })
+        }
+      }
+    }
+    setOverlaps(rects)
+    setOrigMatches(matches)
+    setOrigScore(scoreOriginality(combined, matches))
+  }, [combinedText])
+
+  const addSource = (label: string, text: string) => {
+    const next = [
+      ...sourcesRef.current,
+      { id: crypto.randomUUID(), label: label.trim() || `Source ${sourcesRef.current.length + 1}`, text },
+    ]
+    setSources(next)
+    sourcesRef.current = next
+    if (id) updateDoc(id, { sources: next })
+    runOriginality()
+  }
+
+  const removeSource = (sid: string) => {
+    const next = sourcesRef.current.filter((s) => s.id !== sid)
+    setSources(next)
+    sourcesRef.current = next
+    if (id) updateDoc(id, { sources: next })
+    runOriginality()
+  }
+
+  const jumpToOverlap = (matchId: string) => {
+    setActiveOverlap(matchId)
+    const first = overlaps.find((o) => o.matchId === matchId)
+    if (first) {
+      document
+        .querySelectorAll('.pdf-page-fit')
+        [first.pageIndex]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }
+
+  // scale each page to fit the scroll container's width (no horizontal overflow on mobile)
+  useEffect(() => {
+    const measure = () => {
+      const el = scrollRef.current
+      if (!el || pagesRef.current.length === 0) return
+      const avail = el.clientWidth - 32 // account for padding
+      const maxW = Math.max(...pagesRef.current.map((p) => p.width))
+      setFit(maxW > 0 ? Math.min(1, avail / maxW) : 1)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [pages])
 
   useEffect(() => {
     if (!notice) return
@@ -214,6 +346,9 @@ export default function PdfEditor() {
         pdfFontSize: item.pdfFontSize,
         pdfWidth: item.pdfWidth,
         replacement: a.fullStr,
+        fontClass: item.fontClass,
+        bold: item.bold,
+        italic: item.italic,
       }
     })
     try {
@@ -266,7 +401,7 @@ export default function PdfEditor() {
       </div>
 
       <div className="editor-body">
-        <div className="pdf-scroll">
+        <div className="pdf-scroll" ref={scrollRef}>
           {status === 'loading' && <div className="empty" style={{ margin: 40 }}>Rendering the PDF…</div>}
           {ocrStatus && <div className="ocr-banner">⟳ {ocrStatus} — scanned pages are being made checkable.</div>}
           {pages.map((page) => (
@@ -274,10 +409,19 @@ export default function PdfEditor() {
               key={page.pageIndex}
               page={page}
               alerts={alerts.filter((a) => a.pageIndex === page.pageIndex)}
+              overlaps={overlaps.filter((o) => o.pageIndex === page.pageIndex)}
               activeId={activeId}
+              activeOverlapId={activeOverlap}
               appliedFor={appliedFor}
+              fit={fit}
               onAlertClick={(pa) => {
                 setActiveId(pa.alert.id)
+                setPanel('grammar')
+                setPanelOpen(true)
+              }}
+              onOverlapClick={(o) => {
+                setActiveOverlap(o.matchId)
+                setPanel('originality')
                 setPanelOpen(true)
               }}
             />
@@ -290,22 +434,50 @@ export default function PdfEditor() {
         {panelOpen && <div className="panel-backdrop mobile-only" onClick={() => setPanelOpen(false)} />}
         <aside className={`panel${panelOpen ? ' open' : ''}`}>
           <button className="panel-close mobile-only" onClick={() => setPanelOpen(false)} aria-label="Close">×</button>
-          <h2>Suggestions</h2>
-          <p className="sub">{alerts.length} found · view stays pixel-faithful</p>
-          {alerts.length === 0 ? (
-            <div className="clean"><span className="mark">✓</span>Nothing to flag on these pages.</div>
+          <div className="panel-tabs">
+            <button className={panel === 'grammar' ? 'on' : ''} onClick={() => setPanel('grammar')}>
+              Suggestions{alerts.length > 0 ? ` (${alerts.length})` : ''}
+            </button>
+            <button
+              className={panel === 'originality' ? 'on' : ''}
+              onClick={() => { setPanel('originality'); runOriginality() }}
+            >
+              Originality{origMatches.length > 0 ? ` (${origMatches.length})` : ''}
+            </button>
+          </div>
+
+          {panel === 'originality' ? (
+            <OriginalityPanel
+              sources={sources}
+              overlaps={origMatches}
+              score={origScore}
+              activeId={activeOverlap}
+              onAdd={addSource}
+              onRemove={removeSource}
+              onJump={(mid) => jumpToOverlap(mid)}
+              onFind={() => findSources(combinedText().combined, { limit: 10 })}
+              onAddFound={(s) => addSource(`${s.authors || s.via}${s.year ? `, ${s.year}` : ''}`, `${s.title}. ${s.abstract}`)}
+            />
           ) : (
-            alerts.map((pa) => (
-              <SuggestionCard
-                key={pa.alert.id}
-                alert={pa.alert}
-                active={pa.alert.id === activeId}
-                location={`Page ${pa.pageIndex + 1}`}
-                onClick={() => jumpTo(pa)}
-                onAccept={(index) => accept(pa, index)}
-                onDismiss={() => dismiss(pa)}
-              />
-            ))
+            <>
+              <h2>Suggestions</h2>
+              <p className="sub">{alerts.length} found · view stays pixel-faithful</p>
+              {alerts.length === 0 ? (
+                <div className="clean"><span className="mark">✓</span>Nothing to flag on these pages.</div>
+              ) : (
+                alerts.map((pa) => (
+                  <SuggestionCard
+                    key={pa.alert.id}
+                    alert={pa.alert}
+                    active={pa.alert.id === activeId}
+                    location={`Page ${pa.pageIndex + 1}`}
+                    onClick={() => jumpTo(pa)}
+                    onAccept={(index) => accept(pa, index)}
+                    onDismiss={() => dismiss(pa)}
+                  />
+                ))
+              )}
+            </>
           )}
         </aside>
       </div>
@@ -318,15 +490,23 @@ export default function PdfEditor() {
 function PageView({
   page,
   alerts,
+  overlaps,
   activeId,
+  activeOverlapId,
   appliedFor,
   onAlertClick,
+  onOverlapClick,
+  fit,
 }: {
   page: RenderedPage
   alerts: PdfAlert[]
+  overlaps: PdfOverlap[]
   activeId: string | null
+  activeOverlapId: string | null
   appliedFor: (p: number, i: number) => Applied | undefined
   onAlertClick: (pa: PdfAlert) => void
+  onOverlapClick: (o: PdfOverlap) => void
+  fit: number
 }) {
   const holder = useRef<HTMLDivElement | null>(null)
 
@@ -345,32 +525,56 @@ function PageView({
   }
 
   return (
-    <div className="pdf-page-wrap" style={{ width: page.width, height: page.height }}>
-      <div ref={holder} className="pdf-canvas-holder" />
-      {/* correction overlays (white-out original + show new word) */}
-      {corrections.map(({ item, str }) => {
-        const it = page.items[item]
-        return (
+    <div className="pdf-page-fit" style={{ width: page.width * fit, height: page.height * fit }}>
+      <div
+        className="pdf-page-wrap"
+        style={{ width: page.width, height: page.height, transform: `scale(${fit})`, transformOrigin: 'top left' }}
+      >
+        <div ref={holder} className="pdf-canvas-holder" />
+        {/* originality overlap highlights (drawn under the error underlines) */}
+        {overlaps.map((o) => (
           <div
-            key={`c${item}`}
-            className="pdf-correction"
-            style={{ left: it.left, top: it.top, height: it.height, fontSize: it.fontSize, lineHeight: `${it.height}px` }}
-          >
-            {str}
-          </div>
-        )
-      })}
-      {/* error underlines */}
-      {alerts.map((pa) => (
-        <div
-          key={pa.alert.id}
-          data-pa={`${pa.pageIndex}-${pa.itemIndex}-${pa.charStart}`}
-          className={`pdf-underline pdf-underline--${pa.alert.category}${pa.alert.id === activeId ? ' active' : ''}`}
-          style={{ left: pa.rect.left, top: pa.rect.top, width: pa.rect.width, height: pa.rect.height }}
-          onClick={() => onAlertClick(pa)}
-          title={pa.alert.message}
-        />
-      ))}
+            key={o.id}
+            className={`pdf-overlap pdf-overlap--${o.kind}${o.matchId === activeOverlapId ? ' active' : ''}`}
+            style={{ left: o.rect.left, top: o.rect.top, width: o.rect.width, height: o.rect.height }}
+            onClick={() => onOverlapClick(o)}
+            title={o.kind === 'verbatim' ? 'Matches a source word-for-word' : 'Close paraphrase of a source'}
+          />
+        ))}
+        {/* correction overlays (white-out original + show new word in a matching font) */}
+        {corrections.map(({ item, str }) => {
+          const it = page.items[item]
+          return (
+            <div
+              key={`c${item}`}
+              className="pdf-correction"
+              style={{
+                left: it.left,
+                top: it.top,
+                height: it.height,
+                fontSize: it.fontSize,
+                lineHeight: `${it.height}px`,
+                fontFamily: FONT_STACK[it.fontClass],
+                fontWeight: it.bold ? 700 : 400,
+                fontStyle: it.italic ? 'italic' : 'normal',
+              }}
+            >
+              {str}
+            </div>
+          )
+        })}
+        {/* error underlines */}
+        {alerts.map((pa) => (
+          <div
+            key={pa.alert.id}
+            data-pa={`${pa.pageIndex}-${pa.itemIndex}-${pa.charStart}`}
+            className={`pdf-underline pdf-underline--${pa.alert.category}${pa.alert.id === activeId ? ' active' : ''}`}
+            style={{ left: pa.rect.left, top: pa.rect.top, width: pa.rect.width, height: pa.rect.height }}
+            onClick={() => onAlertClick(pa)}
+            title={pa.alert.message}
+          />
+        ))}
+      </div>
     </div>
   )
 }

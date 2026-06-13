@@ -337,16 +337,16 @@ function convertDrawing(d: Element, ctx: Ctx): string {
   if (!rid || !ctx.rels[rid]) return ''
   const url = mediaUrl(ctx.rels[rid], ctx)
   if (!url) return ''
-  // EMU → px (1px = 9525 EMU)
-  let dims = ''
+  // EMU → px (1px = 9525 EMU). Emit the intrinsic width as a style with
+  // max-width:100% so the image keeps its aspect but never overflows a phone.
+  let style = 'max-width:100%;height:auto'
   const WP = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
   const ext = d.getElementsByTagNameNS(WP, 'extent')[0] ?? d.getElementsByTagName('wp:extent')[0]
   if (ext) {
     const cx = parseInt(ext.getAttribute('cx') ?? '0', 10)
-    const cy = parseInt(ext.getAttribute('cy') ?? '0', 10)
-    if (cx > 0 && cy > 0) dims = ` width="${Math.round(cx / 9525)}" height="${Math.round(cy / 9525)}"`
+    if (cx > 0) style = `width:${Math.round(cx / 9525)}px;${style}`
   }
-  return `<img src="${url}"${dims}>`
+  return `<img src="${url}" style="${style}">`
 }
 
 function convertPict(p: Element, ctx: Ctx): string {

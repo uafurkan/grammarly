@@ -95,6 +95,9 @@ export async function ocrPage(page: RenderedPage, dialect: Dialect, scale: numbe
       pdfY: (page.height - baselineCss) / scale,
       pdfFontSize: (height * 0.85) / scale,
       pdfWidth: width / scale,
+      fontClass: 'serif',
+      bold: false,
+      italic: false,
     })
   }
 

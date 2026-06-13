@@ -1,4 +1,5 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib'
+import type { FontClass } from './pdf-render'
 
 export interface Correction {
   pageIndex: number
@@ -9,6 +10,30 @@ export interface Correction {
   /** original word width in PDF points (approx, for the white-out box) */
   pdfWidth: number
   replacement: string
+  /** original glyphs' font, so the fix blends in */
+  fontClass?: FontClass
+  bold?: boolean
+  italic?: boolean
+}
+
+function standardFontFor(c: Correction): StandardFonts {
+  const fc = c.fontClass ?? 'serif'
+  if (fc === 'mono') {
+    return c.bold && c.italic ? StandardFonts.CourierBoldOblique
+      : c.bold ? StandardFonts.CourierBold
+      : c.italic ? StandardFonts.CourierOblique
+      : StandardFonts.Courier
+  }
+  if (fc === 'sans') {
+    return c.bold && c.italic ? StandardFonts.HelveticaBoldOblique
+      : c.bold ? StandardFonts.HelveticaBold
+      : c.italic ? StandardFonts.HelveticaOblique
+      : StandardFonts.Helvetica
+  }
+  return c.bold && c.italic ? StandardFonts.TimesRomanBoldItalic
+    : c.bold ? StandardFonts.TimesRomanBold
+    : c.italic ? StandardFonts.TimesRomanItalic
+    : StandardFonts.TimesRoman
 }
 
 /**
@@ -23,13 +48,23 @@ export async function exportCorrectedPdf(
   title: string,
 ): Promise<void> {
   const pdf = await PDFDocument.load(original)
-  const font = await pdf.embedFont(StandardFonts.Helvetica)
   const pages = pdf.getPages()
+  // embed each needed standard font once
+  const fontCache = new Map<StandardFonts, PDFFont>()
+  const fontFor = async (sf: StandardFonts): Promise<PDFFont> => {
+    let f = fontCache.get(sf)
+    if (!f) {
+      f = await pdf.embedFont(sf)
+      fontCache.set(sf, f)
+    }
+    return f
+  }
 
   for (const c of corrections) {
     const page = pages[c.pageIndex]
     if (!page) continue
     const size = c.pdfFontSize || 11
+    const font = await fontFor(standardFontFor(c))
     const boxW = Math.max(c.pdfWidth, font.widthOfTextAtSize(c.replacement, size)) + 1
 
     // white-out the original glyphs
@@ -40,7 +75,7 @@ export async function exportCorrectedPdf(
       height: size * 1.1,
       color: rgb(1, 1, 1),
     })
-    // draw the corrected word at the same baseline
+    // draw the corrected word at the same baseline, in a matching font
     page.drawText(c.replacement, {
       x: c.pdfX,
       y: c.pdfY,

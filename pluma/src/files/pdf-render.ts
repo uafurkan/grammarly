@@ -3,6 +3,8 @@ import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
+export type FontClass = 'serif' | 'sans' | 'mono'
+
 export interface TextItemBox {
   str: string
   /** screen-space rect (CSS px at the given render scale) */
@@ -16,6 +18,20 @@ export interface TextItemBox {
   pdfY: number
   pdfFontSize: number
   pdfWidth: number
+  /** coarse font family of the original glyphs, for faithful in-place fixes */
+  fontClass: FontClass
+  bold: boolean
+  italic: boolean
+}
+
+/** Classifies a PDF font name/family into serif / sans / mono. */
+function classifyFont(name: string): FontClass {
+  const n = name.toLowerCase()
+  if (/mono|courier|consol|menlo|typewriter/.test(n)) return 'mono'
+  if (/serif|times|georgia|garamond|minion|cambria|book antiqua|palatino|roman/.test(n)) return 'serif'
+  if (/sans|arial|helvetica|calibri|verdana|tahoma|segoe|roboto|grotesk|gothic/.test(n)) return 'sans'
+  // many embedded thesis fonts are serif (Times-like) — default to serif
+  return 'serif'
 }
 
 export interface RenderedPage {
@@ -52,12 +68,13 @@ export async function renderPage(
   ctx.scale(ratio, ratio)
   await page.render({ canvas, canvasContext: ctx, viewport }).promise
 
-  let rawContent: { items?: unknown[] } = { items: [] }
+  let rawContent: { items?: unknown[]; styles?: Record<string, { fontFamily?: string }> } = { items: [] }
   try {
     rawContent = (await page.getTextContent()) as typeof rawContent
   } catch {
     // some PDFs have malformed content streams — treat as image-only
   }
+  const styles = rawContent.styles ?? {}
   const items: TextItemBox[] = []
   let text = ''
   const offsets: number[] = []
@@ -86,6 +103,11 @@ export async function renderPage(
       const top = t[5] - fontSize
       const pdfFontSize = Math.hypot(transform[2], transform[3])
 
+      // font family + weight/style from the page's style table
+      const fontName = typeof it.fontName === 'string' ? it.fontName : ''
+      const family = styles[fontName]?.fontFamily ?? fontName
+      const probe = `${fontName} ${family}`.toLowerCase()
+
       if (text) text += ' '
       offsets.push(text.length)
       text += it.str
@@ -100,6 +122,9 @@ export async function renderPage(
         pdfY: transform[5],
         pdfFontSize,
         pdfWidth: typeof it.width === 'number' ? it.width : 0,
+        fontClass: classifyFont(probe),
+        bold: /bold|black|heavy|semibold|[-,]bd\b/.test(probe),
+        italic: /italic|oblique|[-,]it\b/.test(probe),
       })
     } catch {
       // skip unparseable items; the page still renders from canvas

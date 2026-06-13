@@ -361,7 +361,10 @@ select.dialect {
   font-size: 17px;
   line-height: 1.7;
   color: var(--ink);
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
+.ProseMirror .tableWrapper { overflow-x: auto; max-width: 100%; }
 .ProseMirror p { margin: 0 0 0.9em; }
 .ProseMirror h1 { font-size: 28px; margin: 1.1em 0 0.5em; }
 .ProseMirror h2 { font-size: 22px; margin: 1.1em 0 0.5em; }
@@ -748,6 +751,7 @@ table.sheet td input {
   align-items: center;
   gap: 20px;
 }
+.pdf-page-fit { position: relative; flex: 0 0 auto; max-width: 100%; }
 .pdf-page-wrap {
   position: relative;
   background: #fff;
@@ -766,15 +770,21 @@ table.sheet td input {
 .pdf-underline--clarity { border-bottom-color: var(--clarity); background: rgba(46, 94, 138, 0.08); }
 .pdf-underline.active { background: rgba(179, 64, 58, 0.22); }
 
+/* originality overlap highlights on the PDF */
+.pdf-overlap { position: absolute; cursor: pointer; border-radius: 2px; }
+.pdf-overlap--verbatim { background: rgba(179, 64, 58, 0.16); }
+.pdf-overlap--paraphrase { background: rgba(46, 94, 138, 0.14); }
+.pdf-overlap.active { outline: 1.5px solid var(--accent); }
+
+/* in-place correction: blends with the page (matched font), only a faint
+   accent underline hints that the word was changed */
 .pdf-correction {
   position: absolute;
   background: #fff;
   color: var(--ink);
-  font-family: var(--serif);
   white-space: pre;
-  padding-right: 2px;
-  box-shadow: 0 0 0 1px rgba(47, 93, 58, 0.4);
-  border-radius: 2px;
+  padding-right: 1px;
+  border-bottom: 1.5px solid rgba(47, 93, 58, 0.55);
 }
 
 /* ---------- print (PDF export of text documents) ---------- */
@@ -846,13 +856,20 @@ table.sheet td input {
   .toolbar .count { display: none; }
 
   /* --- editor surface --- */
-  .editor-scroll { padding: 16px 12px 96px; }
+  .editor-scroll { padding: 16px 10px 96px; }
   .paper {
-    padding: 28px 20px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 24px 16px;
     min-height: auto;
     box-shadow: var(--shadow);
   }
   .ProseMirror { font-size: 16px; }
+  /* keep imported DOCX content inside the screen */
+  .ProseMirror img { max-width: 100% !important; height: auto !important; }
+  .ProseMirror .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .ProseMirror table { min-width: 0; }
 
   /* --- panel becomes a bottom sheet --- */
   .panel {
