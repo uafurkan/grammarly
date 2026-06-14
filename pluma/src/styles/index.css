@@ -476,6 +476,63 @@ select.dialect {
 .panel-tabs button:hover { color: var(--ink); }
 .panel-tabs button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
 
+/* compact "?" guide tab — round, doesn't stretch like the others */
+.panel-tabs button.panel-help-tab {
+  flex: 0 0 auto;
+  width: 30px;
+  padding: 7px 0;
+  font-weight: 600;
+  border-radius: 50%;
+}
+
+/* in-panel "how it works" accordion */
+.help-acc { display: flex; flex-direction: column; gap: 8px; }
+.help-row {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--paper);
+  overflow: hidden;
+}
+.help-row.open { border-color: #d6d0c2; }
+.help-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--sans);
+}
+.help-head:hover { background: rgba(47, 93, 58, 0.04); }
+.help-icon {
+  flex: 0 0 auto;
+  width: 22px;
+  text-align: center;
+  color: var(--accent);
+  font-size: 14px;
+}
+.help-title { flex: 1; font-size: 14px; font-weight: 600; color: var(--ink); }
+.help-chev { flex: 0 0 auto; color: var(--faint); font-size: 18px; line-height: 1; }
+.help-body {
+  padding: 2px 16px 14px 46px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  animation: help-open 160ms ease;
+}
+.help-body p { margin: 0 0 8px; }
+.help-body p:last-child { margin-bottom: 0; }
+.help-body b { color: var(--ink); font-weight: 600; }
+.help-body ul { margin: 4px 0 8px; padding-left: 18px; }
+.help-body li { margin: 3px 0; }
+@keyframes help-open {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* overlap highlights */
 .pl-overlap { cursor: pointer; }
 .pl-overlap--verbatim { background: rgba(179, 64, 58, 0.16); }

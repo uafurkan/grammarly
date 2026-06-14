@@ -27,6 +27,7 @@ import GoalsModal from '../components/GoalsModal'
 import WordPopover from '../components/WordPopover'
 import BibliographyPanel from '../components/BibliographyPanel'
 import AssistPanel from '../ai/AssistPanel'
+import HelpAccordion from '../components/HelpAccordion'
 import { isAiAvailable } from '../ai/capabilities'
 import { fromFoundSource, type Reference } from '../engine/citations'
 
@@ -57,7 +58,7 @@ export default function EditorPage() {
   const acCtrl = useRef<AbortController | null>(null)
 
   const savedState = stored.current?.editorState
-  const [panel, setPanel] = useState<'grammar' | 'originality' | 'citations' | 'assist'>(savedState?.panelTab ?? 'grammar')
+  const [panel, setPanel] = useState<'grammar' | 'originality' | 'citations' | 'assist' | 'help'>(savedState?.panelTab ?? 'grammar')
   const [selText, setSelText] = useState('')
   const aiOn = isAiAvailable()
   const [sources, setSources] = useState<Source[]>(stored.current?.sources ?? [])
@@ -712,9 +713,19 @@ export default function EditorPage() {
                 ✦ Assist
               </button>
             )}
+            <button
+              className={`panel-help-tab${panel === 'help' ? ' on' : ''}`}
+              onClick={() => setPanel('help')}
+              title="How Pluma works"
+              aria-label="How Pluma works"
+            >
+              ?
+            </button>
           </div>
 
-          {panel === 'assist' ? (
+          {panel === 'help' ? (
+            <HelpAccordion aiOn={aiOn} />
+          ) : panel === 'assist' ? (
             <AssistPanel
               selectedText={selText}
               context={{ goals, dialect }}
