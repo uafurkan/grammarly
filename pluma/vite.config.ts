@@ -58,6 +58,7 @@ export default defineConfig({
         // URL, so the path no longer *ends* with office.html — match anywhere.
         navigateFallbackDenylist: [
           /\/pluma-word\.xml(?:[?#]|$)/,
+          /\/pluma-extension\.zip(?:[?#]|$)/,
           /\/office\.html(?:[?#]|$)/,
           /\/privacy\.html(?:[?#]|$)/,
           /\/terms\.html(?:[?#]|$)/,

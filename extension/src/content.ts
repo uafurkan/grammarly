@@ -8,6 +8,9 @@ import { check, DIALECT_LABELS, type Alert, type Dialect } from './checker'
 
 const DEBOUNCE_MS = 600
 const MIN_CHARS = 8
+// Don't run on enormous fields (e.g. a code editor's buffer) — keeps every site
+// snappy and the content script invisible until it's genuinely useful.
+const MAX_CHARS = 20000
 
 type Field = HTMLTextAreaElement | HTMLInputElement | HTMLElement
 
@@ -135,12 +138,18 @@ function runCheck() {
   if (!activeField) return
   const { text } = readField(activeField)
   lastText = text
-  if (text.trim().length < MIN_CHARS) {
+  if (text.trim().length < MIN_CHARS || text.length > MAX_CHARS) {
     alerts = []
     renderBadge()
+    if (panel) renderPanel()
     return
   }
-  alerts = check(text, dialect).filter((a) => !dismissed.has(fp(a)))
+  // A rules bug must never break the host page — fail closed to "no alerts".
+  try {
+    alerts = check(text, dialect).filter((a) => !dismissed.has(fp(a)))
+  } catch {
+    alerts = []
+  }
   renderBadge()
   if (panel) renderPanel()
 }
@@ -183,11 +192,21 @@ function removeBadge() {
   badge = null
 }
 
+let repoScheduled = false
 function reposition() {
-  const r = fieldRect()
-  if (!r) return
-  positionBadge(r)
-  if (panel) positionPanel(r)
+  if (repoScheduled) return
+  repoScheduled = true
+  requestAnimationFrame(() => {
+    repoScheduled = false
+    const r = fieldRect()
+    if (!r) return
+    // the field may have scrolled out of view — hide rather than float orphaned
+    const offscreen = r.bottom < 0 || r.top > window.innerHeight
+    if (badge) badge.style.display = offscreen ? 'none' : ''
+    if (offscreen) return
+    positionBadge(r)
+    if (panel) positionPanel(r)
+  })
 }
 
 // ---- suggestions panel ----------------------------------------------------

@@ -1091,6 +1091,7 @@
   // src/content.ts
   var DEBOUNCE_MS = 600;
   var MIN_CHARS = 8;
+  var MAX_CHARS = 2e4;
   var dialect = "en-US";
   var activeField = null;
   var lastText = "";
@@ -1196,12 +1197,17 @@
     if (!activeField) return;
     const { text } = readField(activeField);
     lastText = text;
-    if (text.trim().length < MIN_CHARS) {
+    if (text.trim().length < MIN_CHARS || text.length > MAX_CHARS) {
       alerts = [];
       renderBadge();
+      if (panel) renderPanel();
       return;
     }
-    alerts = check(text, dialect).filter((a) => !dismissed.has(fp(a)));
+    try {
+      alerts = check(text, dialect).filter((a) => !dismissed.has(fp(a)));
+    } catch {
+      alerts = [];
+    }
     renderBadge();
     if (panel) renderPanel();
   }
@@ -1236,11 +1242,20 @@
     badge?.remove();
     badge = null;
   }
+  var repoScheduled = false;
   function reposition() {
-    const r = fieldRect();
-    if (!r) return;
-    positionBadge(r);
-    if (panel) positionPanel(r);
+    if (repoScheduled) return;
+    repoScheduled = true;
+    requestAnimationFrame(() => {
+      repoScheduled = false;
+      const r = fieldRect();
+      if (!r) return;
+      const offscreen = r.bottom < 0 || r.top > window.innerHeight;
+      if (badge) badge.style.display = offscreen ? "none" : "";
+      if (offscreen) return;
+      positionBadge(r);
+      if (panel) positionPanel(r);
+    });
   }
   function togglePanel() {
     if (panel) closePanel();
