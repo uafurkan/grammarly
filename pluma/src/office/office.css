@@ -23,7 +23,9 @@
 .office-brand em { color: var(--accent); font-style: normal; }
 .office-host { font-family: var(--sans); font-size: 11px; color: var(--faint); font-weight: 400; }
 
-.office-check { width: 100%; justify-content: center; }
+.office-actions { display: flex; gap: 8px; }
+.office-check { flex: 1; justify-content: center; }
+.office-goals { flex: 0 0 auto; white-space: nowrap; }
 .office-summary { margin: 12px 0 6px; }
 .office-list { margin-top: 8px; }
 .office-hint { color: var(--muted); font-size: 13px; line-height: 1.55; margin-top: 18px; }

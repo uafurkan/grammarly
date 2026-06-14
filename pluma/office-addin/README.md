@@ -42,7 +42,8 @@ then **Insert → My Add-ins → Pluma**.
 
 ## Publishing
 
-To list it on Microsoft AppSource later: validate with
-`npx office-addin-manifest validate office-addin/manifest.xml`, replace the
-`<Id>` with your own GUID, and submit through Partner Center. Hosting is already
-covered by the existing Vercel deploy.
+To list it on Microsoft AppSource, follow the step-by-step kit in
+[`APPSOURCE_SUBMISSION.md`](./APPSOURCE_SUBMISSION.md) — it has the finalized
+manifest notes, ready-to-paste listing copy, a screenshot shot-list, the Partner
+Center flow, and a per-host test matrix. Hosting and the privacy/terms pages are
+already covered by the existing Vercel deploy.

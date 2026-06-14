@@ -6,7 +6,7 @@
   xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
 
-  <Id>b6a9c2e4-3f1a-4d8b-9c7e-1a2b3c4d5e6f</Id>
+  <Id>238c1949-cd20-433a-bab5-45c58bb2cb6e</Id>
   <Version>1.0.1.0</Version>
   <ProviderName>Pluma</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>

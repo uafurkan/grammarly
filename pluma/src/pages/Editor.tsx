@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EditorContent, useEditor, type Editor as TTEditor } from '@tiptap/react'
 import { buildExtensions } from '../editor/extensions'
-import { alertRange, docText, suggestionsKey } from '../editor/suggestions-plugin'
+import { alertAt, alertRange, docText, suggestionsKey } from '../editor/suggestions-plugin'
 import { originalityKey, overlapRange } from '../editor/originality-plugin'
 import { hemingwayKey, type RangedMark } from '../editor/hemingway-plugin'
 import { autocompleteKey } from '../editor/autocomplete-plugin'
@@ -22,11 +22,13 @@ import { DEFAULT_GOALS, type WritingGoals } from '../engine/goals'
 import { getDoc, updateDoc, saveEditorState, touchDoc, type EditorState } from '../store/documents'
 import { exportDocx } from '../files/docx-export'
 import SuggestionCard from '../components/SuggestionCard'
+import SuggestionPopover from '../components/SuggestionPopover'
 import OriginalityPanel from '../components/OriginalityPanel'
 import GoalsModal from '../components/GoalsModal'
 import WordPopover from '../components/WordPopover'
 import BibliographyPanel from '../components/BibliographyPanel'
 import AssistPanel from '../ai/AssistPanel'
+import HelpAccordion from '../components/HelpAccordion'
 import { isAiAvailable } from '../ai/capabilities'
 import { fromFoundSource, type Reference } from '../engine/citations'
 
@@ -53,11 +55,15 @@ export default function EditorPage() {
   const [popover, setPopover] = useState<
     { word: string; before: string; after: string; from: number; to: number; x: number; y: number } | null
   >(null)
+  // Grammarly-style floating correction card anchored to the clicked underline
+  const [inlinePop, setInlinePop] = useState<
+    { alert: Alert; anchor: { left: number; top: number; bottom: number } } | null
+  >(null)
   const acTimer = useRef<number | undefined>(undefined)
   const acCtrl = useRef<AbortController | null>(null)
 
   const savedState = stored.current?.editorState
-  const [panel, setPanel] = useState<'grammar' | 'originality' | 'citations' | 'assist'>(savedState?.panelTab ?? 'grammar')
+  const [panel, setPanel] = useState<'grammar' | 'originality' | 'citations' | 'assist' | 'help'>(savedState?.panelTab ?? 'grammar')
   const [selText, setSelText] = useState('')
   const aiOn = isAiAvailable()
   const [sources, setSources] = useState<Source[]>(stored.current?.sources ?? [])
@@ -374,9 +380,20 @@ export default function EditorPage() {
   const editor = useEditor({
     extensions: buildExtensions(
       (alertId) => {
+        // Clicking an underline opens the floating correction card right there
+        // (Grammarly's inline popup), not the whole side panel.
+        const ed = editorRef.current
+        if (!ed) return
+        const at = alertAt(ed.state, alertId)
+        if (!at) return
+        let c: { left: number; top: number; bottom: number }
+        try {
+          c = ed.view.coordsAtPos(at.from)
+        } catch {
+          return
+        }
         setActive(alertId)
-        setPanel('grammar')
-        setPanelOpen(true)
+        setInlinePop({ alert: at.alert, anchor: { left: c.left, top: c.top, bottom: c.bottom } })
       },
       (overlapId) => {
         setPanel('originality')
@@ -386,6 +403,7 @@ export default function EditorPage() {
     ),
     content: (stored.current?.content as never) ?? '',
     onUpdate: () => {
+      setInlinePop(null) // the anchored word just moved/changed
       scheduleCheck()
       scheduleSave()
       scheduleAutocomplete()
@@ -546,6 +564,7 @@ export default function EditorPage() {
   }
 
   const onScroll = () => {
+    if (inlinePop) setInlinePop(null) // its anchor would drift with the scroll
     window.clearTimeout(scrollTimer.current)
     scrollTimer.current = window.setTimeout(persistUiState, 400)
   }
@@ -674,6 +693,17 @@ export default function EditorPage() {
         />
       )}
 
+      {inlinePop && (
+        <SuggestionPopover
+          alert={inlinePop.alert}
+          anchor={inlinePop.anchor}
+          onAccept={(i) => { accept(inlinePop.alert, i); setInlinePop(null) }}
+          onDismiss={() => { dismiss(inlinePop.alert); setInlinePop(null) }}
+          onAddToDictionary={() => { addToDictionary(inlinePop.alert); setInlinePop(null) }}
+          onClose={() => setInlinePop(null)}
+        />
+      )}
+
       <Toolbar editor={editor} counts={counts} />
 
       <div className="editor-body">
@@ -712,9 +742,19 @@ export default function EditorPage() {
                 ✦ Assist
               </button>
             )}
+            <button
+              className={`panel-help-tab${panel === 'help' ? ' on' : ''}`}
+              onClick={() => setPanel('help')}
+              title="How Pluma works"
+              aria-label="How Pluma works"
+            >
+              ?
+            </button>
           </div>
 
-          {panel === 'assist' ? (
+          {panel === 'help' ? (
+            <HelpAccordion aiOn={aiOn} />
+          ) : panel === 'assist' ? (
             <AssistPanel
               selectedText={selText}
               context={{ goals, dialect }}

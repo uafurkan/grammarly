@@ -124,6 +124,43 @@ select.dialect {
 
 .home .actions { display: flex; gap: 12px; margin-bottom: 56px; }
 
+/* "Get Pluma everywhere" download band */
+.home-get {
+  max-width: 760px;
+  margin: 8px 0 36px;
+  text-align: left;
+}
+.home-get-title {
+  font-family: var(--serif);
+  font-size: 22px;
+  margin: 0 0 16px;
+}
+.home-get-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.get-card {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.get-kicker {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-weight: 600;
+}
+.get-card h3 { font-size: 17px; margin: 6px 0 6px; }
+.get-card p { font-size: 13.5px; color: var(--muted); line-height: 1.55; margin: 0 0 14px; }
+.get-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .home-get-grid { grid-template-columns: 1fr; }
+}
+
 .home .notes {
   display: flex;
   gap: 40px;
@@ -142,6 +179,10 @@ select.dialect {
   font-size: 12.5px;
   border-top: 1px solid var(--rule);
 }
+
+.home footer a, .install-footer a { color: var(--muted); text-decoration: none; }
+.home footer a:hover, .install-footer a:hover { color: var(--ink); }
+.foot-sep { opacity: 0.5; }
 
 /* ---------- documents ---------- */
 
@@ -471,6 +512,63 @@ select.dialect {
 }
 .panel-tabs button:hover { color: var(--ink); }
 .panel-tabs button.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
+
+/* compact "?" guide tab — round, doesn't stretch like the others */
+.panel-tabs button.panel-help-tab {
+  flex: 0 0 auto;
+  width: 30px;
+  padding: 7px 0;
+  font-weight: 600;
+  border-radius: 50%;
+}
+
+/* in-panel "how it works" accordion */
+.help-acc { display: flex; flex-direction: column; gap: 8px; }
+.help-row {
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--paper);
+  overflow: hidden;
+}
+.help-row.open { border-color: #d6d0c2; }
+.help-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--sans);
+}
+.help-head:hover { background: rgba(47, 93, 58, 0.04); }
+.help-icon {
+  flex: 0 0 auto;
+  width: 22px;
+  text-align: center;
+  color: var(--accent);
+  font-size: 14px;
+}
+.help-title { flex: 1; font-size: 14px; font-weight: 600; color: var(--ink); }
+.help-chev { flex: 0 0 auto; color: var(--faint); font-size: 18px; line-height: 1; }
+.help-body {
+  padding: 2px 16px 14px 46px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  animation: help-open 160ms ease;
+}
+.help-body p { margin: 0 0 8px; }
+.help-body p:last-child { margin-bottom: 0; }
+.help-body b { color: var(--ink); font-weight: 600; }
+.help-body ul { margin: 4px 0 8px; padding-left: 18px; }
+.help-body li { margin: 3px 0; }
+@keyframes help-open {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* overlap highlights */
 .pl-overlap { cursor: pointer; }
@@ -1162,6 +1260,28 @@ select.dialect {
   margin-bottom: 10px;
   cursor: pointer;
   transition: border-color 120ms ease;
+}
+
+/* floating inline correction card (Grammarly-style "layer 3") */
+.sugg-pop {
+  position: fixed;
+  z-index: 60;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  animation: sugg-pop-in 120ms ease;
+}
+.sugg-pop .alert-card {
+  border: 0;
+  margin: 0;
+  cursor: default;
+}
+@keyframes sugg-pop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .alert-card:hover { border-color: var(--faint); }
 .alert-card.active { border-color: var(--accent); }

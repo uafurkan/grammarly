@@ -17,6 +17,7 @@ import {
 import { findSources } from '../engine/source-finder'
 import SuggestionCard from '../components/SuggestionCard'
 import OriginalityPanel from '../components/OriginalityPanel'
+import HelpAccordion from '../components/HelpAccordion'
 
 const MAX_PAGES = 60
 const MAX_OCR_PAGES = 15
@@ -69,7 +70,7 @@ export default function PdfEditor() {
   const [truncated, setTruncated] = useState(false)
   const [ocrStatus, setOcrStatus] = useState<string | null>(null)
 
-  const [panel, setPanel] = useState<'grammar' | 'originality'>('grammar')
+  const [panel, setPanel] = useState<'grammar' | 'originality' | 'help'>('grammar')
   const [sources, setSources] = useState<Source[]>(meta.current?.sources ?? [])
   const [overlaps, setOverlaps] = useState<PdfOverlap[]>([])
   const [activeOverlap, setActiveOverlap] = useState<string | null>(null)
@@ -511,9 +512,19 @@ export default function PdfEditor() {
             >
               Originality{origPhase === 'done' && origMatches.length > 0 ? ` (${origMatches.length})` : ''}
             </button>
+            <button
+              className={`panel-help-tab${panel === 'help' ? ' on' : ''}`}
+              onClick={() => setPanel('help')}
+              title="How Pluma works"
+              aria-label="How Pluma works"
+            >
+              ?
+            </button>
           </div>
 
-          {panel === 'originality' ? (
+          {panel === 'help' ? (
+            <HelpAccordion aiOn={false} include={['suggestions', 'originality', 'language', 'privacy']} />
+          ) : panel === 'originality' ? (
             <OriginalityPanel
               sources={sources}
               overlaps={origMatches}

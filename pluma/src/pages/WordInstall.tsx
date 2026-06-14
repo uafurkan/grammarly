@@ -167,7 +167,13 @@ export default function WordInstall() {
         </div>
       </main>
 
-      <footer className="install-footer">Pluma · writing assistant for students · documents stay in your browser</footer>
+      <footer className="install-footer">
+        Pluma · writing assistant for students · documents stay in your browser
+        <span className="foot-sep"> · </span>
+        <a href="/privacy.html">Privacy</a>
+        <span className="foot-sep"> · </span>
+        <a href="/terms.html">Terms</a>
+      </footer>
 
       {guide && <WordGuide onClose={() => setGuide(false)} />}
     </div>

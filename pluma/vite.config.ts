@@ -50,11 +50,19 @@ export default defineConfig({
         globIgnores: ['**/web-llm-*.js', '**/ai.worker-*.js', 'office.html', '**/office-*.js'],
         maximumFileSizeToCacheInBytes: 3.5 * 1024 * 1024,
         navigateFallback: 'index.html',
-        // don't let the SPA fallback swallow the add-in manifest download or the
-        // Office task-pane page (Word must receive office.html, not index.html).
+        // don't let the SPA fallback swallow the add-in manifest download, the
+        // Office task-pane page (Word must receive office.html, not index.html),
+        // or the standalone legal pages (AppSource reviewers must get the real
+        // privacy/terms HTML, not the SPA shell).
         // No `$` anchor: Office appends a `?_host_Info=...` query to the task-pane
         // URL, so the path no longer *ends* with office.html — match anywhere.
-        navigateFallbackDenylist: [/\/pluma-word\.xml(?:[?#]|$)/, /\/office\.html(?:[?#]|$)/],
+        navigateFallbackDenylist: [
+          /\/pluma-word\.xml(?:[?#]|$)/,
+          /\/pluma-extension\.zip(?:[?#]|$)/,
+          /\/office\.html(?:[?#]|$)/,
+          /\/privacy\.html(?:[?#]|$)/,
+          /\/terms\.html(?:[?#]|$)/,
+        ],
         runtimeCaching: [
           {
             // pdf.js worker (.mjs) + Hunspell dictionaries — cache on first use

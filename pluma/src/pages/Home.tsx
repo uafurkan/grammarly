@@ -28,6 +28,7 @@ export default function Home() {
         <Link to="/" className="brand">Plu<em>ma</em></Link>
         <span style={{ flex: 1 }} />
         <button className="btn btn--quiet" title="How to use Pluma" onClick={() => window.dispatchEvent(new Event('pluma:guide'))}>How it works</button>
+        <Link to="/extension" className="btn btn--quiet">For your browser</Link>
         <Link to="/word" className="btn btn--quiet">Pluma for Word</Link>
         <Link to="/docs" className="btn btn--quiet">My documents</Link>
       </div>
@@ -64,6 +65,30 @@ export default function Home() {
           </div>
         )}
 
+        <section className="home-get">
+          <h2 className="home-get-title">Get Pluma everywhere — free</h2>
+          <div className="home-get-grid">
+            <div className="get-card">
+              <span className="get-kicker">Browser extension</span>
+              <h3>In every text box on the web</h3>
+              <p>Grammar, spelling and clarity in search boxes, forms, posts and web email — on your device.</p>
+              <div className="get-actions">
+                <a className="btn btn--primary" href="/pluma-extension.zip" download="pluma-extension.zip">↓ Download</a>
+                <Link className="btn btn--quiet" to="/extension">How to install</Link>
+              </div>
+            </div>
+            <div className="get-card">
+              <span className="get-kicker">Microsoft Word</span>
+              <h3>Pluma inside Word</h3>
+              <p>The same checks in a panel inside Word — on Windows, Mac, or the web. One small file to add.</p>
+              <div className="get-actions">
+                <a className="btn btn--primary" href="/pluma-word.xml" download="pluma-word.xml">↓ Download</a>
+                <Link className="btn btn--quiet" to="/word">How to install</Link>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div className="notes">
           <div>
             <h3>Two languages, four voices</h3>
@@ -89,7 +114,13 @@ export default function Home() {
         </div>
       </main>
 
-      <footer>Pluma · writing assistant for students · documents stay in your browser</footer>
+      <footer>
+        Pluma · writing assistant for students · documents stay in your browser
+        <span className="foot-sep"> · </span>
+        <a href="/privacy.html">Privacy</a>
+        <span className="foot-sep"> · </span>
+        <a href="/terms.html">Terms</a>
+      </footer>
       {notice && <div className="notice">{notice}</div>}
     </div>
   )
