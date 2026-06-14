@@ -12,7 +12,9 @@ const W = 'A-Za-zÁÉÍÓÚÜÑáéíóúüñ'
 const repeatedWord = regexRule(
   'es.repeated-word',
   ALL_ES,
-  new RegExp(`\\b([${W}]+)(\\s+)\\1\\b`, 'gi'),
+  // Spaces only (no tabs/newlines) and case-sensitive — so it doesn't fire
+  // across table cells, list items, or headings, nor on label pairs.
+  new RegExp(`\\b([${W}]+)( +)\\1\\b`, 'g'),
   (m) => ({
     replacements: [m[1]],
     category: 'correctness',
