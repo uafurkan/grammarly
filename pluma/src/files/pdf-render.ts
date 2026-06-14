@@ -49,6 +49,25 @@ export async function loadPdf(data: ArrayBuffer): Promise<pdfjs.PDFDocumentProxy
   return pdfjs.getDocument({ data }).promise
 }
 
+// Browsers (and iOS Safari especially) cap how large a <canvas> backing store
+// can be: roughly 4096 px per side and ~16.7M px² of area on iOS. Exceed it and
+// the canvas renders BLANK with no error — which is why some large-page or
+// high-DPI PDFs showed nothing on screen. Clamp the device-pixel ratio so the
+// backing store always stays within the limit. We only lower the backing
+// resolution, never the CSS layout size, so every overlay (underlines, text
+// layer, corrections) stays perfectly aligned — big pages just render a touch
+// softer instead of disappearing.
+const MAX_CANVAS_SIDE = 4096
+const MAX_CANVAS_AREA = 16_777_216
+
+function safeBackingRatio(cssWidth: number, cssHeight: number): number {
+  let ratio = Math.min(window.devicePixelRatio || 1, 2)
+  ratio = Math.min(ratio, MAX_CANVAS_SIDE / cssWidth, MAX_CANVAS_SIDE / cssHeight)
+  ratio = Math.min(ratio, Math.sqrt(MAX_CANVAS_AREA / (cssWidth * cssHeight)))
+  // never go to zero/negative for absurdly large pages — keep something visible
+  return Math.max(ratio, 0.1)
+}
+
 /** Renders one page to a canvas and extracts positioned text items. */
 export async function renderPage(
   doc: pdfjs.PDFDocumentProxy,
@@ -59,7 +78,7 @@ export async function renderPage(
   const viewport = page.getViewport({ scale })
 
   const canvas = document.createElement('canvas')
-  const ratio = Math.min(window.devicePixelRatio || 1, 2)
+  const ratio = safeBackingRatio(viewport.width, viewport.height)
   canvas.width = Math.floor(viewport.width * ratio)
   canvas.height = Math.floor(viewport.height * ratio)
   canvas.style.width = `${viewport.width}px`
