@@ -1,0 +1,13 @@
+{
+  "name": "pluma-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pluma browser extension — free writing help in any text box.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0"
+  }
+}
