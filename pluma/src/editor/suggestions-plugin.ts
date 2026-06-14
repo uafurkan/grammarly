@@ -101,6 +101,13 @@ export function alertRange(state: EditorState, id: string): { from: number; to: 
   return hit ? { from: hit.from, to: hit.to } : null
 }
 
+/** The alert object plus its current range, looked up from the decoration spec. */
+export function alertAt(state: EditorState, id: string): RangedAlert | null {
+  const decos = suggestionsKey.getState(state)
+  const hit = decos?.find(undefined, undefined, (spec) => (spec as { id: string }).id === id)[0]
+  return hit ? { alert: (hit.spec as { alert: Alert }).alert, from: hit.from, to: hit.to } : null
+}
+
 /**
  * Flattens the document to plain text and returns a mapper from text offsets
  * back to ProseMirror positions. Alerts spanning block boundaries are dropped
