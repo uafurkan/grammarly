@@ -35,9 +35,51 @@ function isSentenceStart(text: string, begin: number): boolean {
 const MAX_SPELL_ALERTS = 120
 
 /**
- * Produces spelling alerts for words the speller doesn't recognise. Skips
- * numbers, URLs/emails, all-caps acronyms, personal-dictionary words, and
- * non-initial capitalised words (likely proper nouns) to keep noise low.
+ * Decides whether a single token is an unrecognised word *worth* flagging.
+ * Skips the things that are almost never typos: numbers, hyphenated compounds
+ * (pixel-perfect, open-source), ALL-CAPS acronyms (XML, JSON), identifiers with
+ * an internal capital (camelCase / PascalCase — DrawingML, MinIO, NuGet),
+ * URLs/emails, personal-dictionary words, and mid-sentence capitalised words
+ * (proper nouns). Returns false for anything we recognise or deliberately let
+ * through.
+ */
+function isUnknownCandidate(
+  tok: Tok,
+  text: string,
+  speller: Nspell,
+  personal: Set<string>,
+): boolean {
+  const w = tok.raw
+  if (w.length < 2) return false
+  if (/\d/.test(w)) return false
+  if (w.includes('-')) return false // hyphenated compound (technical term)
+  if (/^[A-ZÁÉÍÓÚÜÑ]{2,}$/.test(w)) return false // ALL-CAPS acronym
+  if (/.[A-ZÁÉÍÓÚÜÑ]/.test(w)) return false // internal capital → identifier/brand
+  if (personal.has(w.toLowerCase())) return false
+
+  // URL/email/handle guard: check a small window around the token
+  const ctx = text.slice(Math.max(0, tok.begin - 1), tok.end + 1)
+  if (/[@/.]/.test(ctx[0]) || /[@/]/.test(ctx[ctx.length - 1])) return false
+
+  if (speller.correct(w)) return false
+  // tolerate sentence-initial capitalisation by also testing the lowercase form
+  const lower = w.toLowerCase()
+  if (lower !== w && speller.correct(lower)) return false
+  // a capitalised word mid-sentence is most likely a proper noun → skip
+  if (/^[A-ZÁÉÍÓÚÜÑ]/.test(w) && !isSentenceStart(text, tok.begin)) return false
+  return true
+}
+
+/**
+ * Produces spelling alerts for words the speller doesn't recognise.
+ *
+ * Beyond the per-word guards in isUnknownCandidate, it reads the *context*: a
+ * word is only flagged when it stands alone among recognised words. Runs of two
+ * or more unknown words in a row — Latin/lorem-ipsum filler, code, foreign
+ * quotes, product names — are left untouched, because "correcting" them one
+ * word at a time (amet → abet, elit → emit) is exactly the nonsense we want to
+ * avoid. A real typo is almost always a lone stranger in a sentence of real
+ * words; that's what we surface.
  */
 export function spellcheck(
   text: string,
@@ -47,26 +89,16 @@ export function spellcheck(
 ): RuleMatch[] {
   const out: RuleMatch[] = []
   const toks = tokenize(text)
+  const unknown = toks.map((tok) => isUnknownCandidate(tok, text, speller, personal))
+
   for (let ti = 0; ti < toks.length; ti++) {
-    const tok = toks[ti]
+    if (!unknown[ti]) continue
     if (out.length >= MAX_SPELL_ALERTS) break
+    // context guard: skip clusters of unknown words (foreign text, code, lorem ipsum)
+    if (unknown[ti - 1] || unknown[ti + 1]) continue
+
+    const tok = toks[ti]
     const w = tok.raw
-    if (w.length < 2) continue
-    if (/\d/.test(w)) continue
-    if (/^[A-ZÁÉÍÓÚÜÑ]{2,}$/.test(w)) continue // acronym
-    if (personal.has(w.toLowerCase())) continue
-
-    // URL/email/handle guard: check a small window around the token
-    const ctx = text.slice(Math.max(0, tok.begin - 1), tok.end + 1)
-    if (/[@/.]/.test(ctx[0]) || /[@/]/.test(ctx[ctx.length - 1])) continue
-
-    if (speller.correct(w)) continue
-    // tolerate sentence-initial capitalisation by also testing the lowercase form
-    const lower = w.toLowerCase()
-    if (lower !== w && speller.correct(lower)) continue
-    // a capitalised word mid-sentence is most likely a proper noun → skip
-    if (/^[A-ZÁÉÍÓÚÜÑ]/.test(w) && !isSentenceStart(text, tok.begin)) continue
-
     const prev = toks[ti - 1]?.raw
     const next = toks[ti + 1]?.raw
     const suggestions = rankSuggestions(w, speller.suggest(w), prev, next).slice(0, 6)

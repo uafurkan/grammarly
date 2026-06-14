@@ -11,7 +11,11 @@ const ALL_EN: Dialect[] = ['en-US', 'en-GB']
 const repeatedWord = regexRule(
   'en.repeated-word',
   ALL_EN,
-  /\b([A-Za-z']+)(\s+)\1\b/gi,
+  // Only a real in-line repeat: same word, same case, separated by spaces — not
+  // tabs or newlines. That keeps it from firing across table cells, list items,
+  // or headings (Word joins those with \t / \r), and the case-sensitive match
+  // avoids "html HTML" / "Text text" style label pairs.
+  /\b([A-Za-z']+)( +)\1\b/g,
   (m) =>
     // "had had", "that that" are legitimate often enough to skip the noisiest ones
     ['had', 'that', 'very', 'really'].includes(m[1].toLowerCase())
@@ -32,7 +36,12 @@ const doubleSpace = regexRule('en.double-space', ALL_EN, /\S {2,}\S/g, (m) => ({
 const AN_EXCEPTIONS = new Set(['university', 'unit', 'united', 'user', 'one', 'once', 'european', 'unique', 'useful'])
 const A_EXCEPTIONS = new Set(['hour', 'honest', 'honor', 'honour', 'heir'])
 
-const articleAn = regexRule('en.a-vs-an', ALL_EN, /\b(a|an) ([a-z]+)/gi, (m) => {
+const articleAn = regexRule('en.a-vs-an', ALL_EN, /\b(a|an) ([A-Za-z]+)/gi, (m) => {
+  // Never touch acronyms, initialisms, proper nouns, or identifiers (anything
+  // with a capital): "an XML", "a URI", "an HTML" are correct by *pronunciation*
+  // (ex-em-el, you-are-eye, aitch), which spelling can't tell — so flagging them
+  // produced confident, wrong "fixes". Only plain lowercase words get corrected.
+  if (/[A-Z]/.test(m[2])) return null
   const article = m[1].toLowerCase()
   const word = m[2].toLowerCase()
   const startsVowel = /^[aeiou]/.test(word)
