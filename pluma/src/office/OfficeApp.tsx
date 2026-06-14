@@ -3,9 +3,21 @@ import { check, checkAsync, fingerprint } from '../engine/checker'
 import { getPersonalWords, addPersonalWord } from '../engine/personal'
 import { analyzeText, analyzeTone, type WritingAnalytics, type ToneScore } from '../engine/analytics'
 import { DIALECT_LABELS, type Alert, type Category, type Dialect } from '../engine/types'
-import { DEFAULT_GOALS } from '../engine/goals'
+import { DEFAULT_GOALS, type WritingGoals } from '../engine/goals'
 import SuggestionCard from '../components/SuggestionCard'
+import GoalsModal from '../components/GoalsModal'
 import { readDocText, applyReplacement, selectOccurrence, occurrenceBefore } from './word'
+
+// The Word task pane has no per-document store like the web app, so writing
+// goals are remembered for the whole add-in in localStorage.
+const GOALS_KEY = 'pluma.office.goals'
+function loadGoals(): WritingGoals {
+  try {
+    const raw = localStorage.getItem(GOALS_KEY)
+    if (raw) return { ...DEFAULT_GOALS, ...JSON.parse(raw) }
+  } catch { /* ignore */ }
+  return DEFAULT_GOALS
+}
 
 type Filter = 'all' | Category
 
@@ -43,6 +55,9 @@ export default function OfficeApp() {
   const [filter, setFilter] = useState<Filter>('all')
   const [activeId, setActiveId] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [goals, setGoals] = useState<WritingGoals>(loadGoals)
+  const [goalsOpen, setGoalsOpen] = useState(false)
+  const goalsRef = useRef(goals)
 
   // Refs let the idle poller read the latest values without being torn down and
   // re-created on every keystroke of state — the interval is set up exactly once.
@@ -57,6 +72,7 @@ export default function OfficeApp() {
 
   useEffect(() => { liveRef.current = live }, [live])
   useEffect(() => { checkedRef.current = checked }, [checked])
+  useEffect(() => { goalsRef.current = goals }, [goals])
   useEffect(() => { dialectRef.current = dialect }, [dialect])
   useEffect(() => { dismissedRef.current = dismissed }, [dismissed])
   useEffect(() => () => { aliveRef.current = false }, [])
@@ -80,11 +96,9 @@ export default function OfficeApp() {
     try {
       const text = opts.text ?? (await readDocText())
       lastTextRef.current = text
-      // DEFAULT_GOALS keeps the engine identical to the web app: no clarity rules
-      // are suppressed, but when a long document exceeds the alert cap the
-      // highest-weighted alerts (correctness over style) survive — without a
-      // policy the cap is a positional slice that can hide real grammar errors.
-      const goals = DEFAULT_GOALS
+      // Goals tune which clarity/style suggestions show (correctness never
+      // changes) and decide which alerts survive the cap on long documents.
+      const goals = goalsRef.current
       const personal = getPersonalWords()
       if (!aliveRef.current) return
       setDocText(text)
@@ -137,6 +151,16 @@ export default function OfficeApp() {
     void performCheck({ silent: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialect])
+
+  const changeGoals = (g: WritingGoals) => {
+    setGoals(g)
+    goalsRef.current = g
+    try { localStorage.setItem(GOALS_KEY, JSON.stringify(g)) } catch { /* ignore */ }
+    if (checkedRef.current) {
+      lastTextRef.current = '' // force the poller to honour the re-check
+      void performCheck({ silent: true })
+    }
+  }
 
   const applyFix = async (alert: Alert, index: number) => {
     const replacement = alert.replacements[index]
@@ -204,9 +228,16 @@ export default function OfficeApp() {
         </select>
       </div>
 
-      <button className="btn btn--primary office-check" onClick={() => void performCheck()} disabled={busy}>
-        {busy ? 'Checking…' : checked ? '↻ Re-check document' : 'Check document'}
-      </button>
+      <div className="office-actions">
+        <button className="btn btn--primary office-check" onClick={() => void performCheck()} disabled={busy}>
+          {busy ? 'Checking…' : checked ? '↻ Re-check document' : 'Check document'}
+        </button>
+        <button className="btn office-goals" onClick={() => setGoalsOpen(true)} title="Set who you're writing for">⌖ Goals</button>
+      </div>
+
+      {goalsOpen && (
+        <GoalsModal goals={goals} onSave={changeGoals} onClose={() => setGoalsOpen(false)} />
+      )}
 
       <div className="office-controls">
         <label className="office-live" title="Re-check automatically as you type">
